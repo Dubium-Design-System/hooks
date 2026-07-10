@@ -1,7 +1,7 @@
-import { defineConfig } from "vite"
 import react from "@vitejs/plugin-react"
 import { resolve } from "node:path"
 import { visualizer } from "rollup-plugin-visualizer"
+import { defineConfig } from "vite"
 
 const external = ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"]
 

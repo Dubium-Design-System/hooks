@@ -36,10 +36,13 @@ type WindowWithResizeObserver = {
 	ResizeObserver?: typeof ResizeObserver
 } & Window
 
+type LogEvent = (area: string, event: string, details?: unknown) => void
+
 /**
- * Возвращает document, которому принадлежит элемент, или глобальный document.
+ * Возвращает document, которому принадлежит элемент,
+ * или глобальный document.
  *
- * @param element - DOM-элемент или null.
+ * @param element DOM-элемент или null.
  * @returns Document или null при SSR.
  */
 const getOwnerDocument = (element: HTMLElement | null): Document | null => {
@@ -51,9 +54,10 @@ const getOwnerDocument = (element: HTMLElement | null): Document | null => {
 }
 
 /**
- * Возвращает window, которому принадлежит элемент, или глобальный window.
+ * Возвращает window, которому принадлежит элемент,
+ * или глобальный window.
  *
- * @param element - DOM-элемент или null.
+ * @param element DOM-элемент или null.
  * @returns WindowWithResizeObserver или null при SSR.
  */
 const getOwnerWindow = (element: HTMLElement | null): null | WindowWithResizeObserver => {
@@ -64,6 +68,7 @@ const getOwnerWindow = (element: HTMLElement | null): null | WindowWithResizeObs
 
 export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseHoverSafeZoneAreaResult => {
 	const resolvedOptions = useResolvedHoverSafeZoneAreaOptions(options)
+
 	const optionsRef = useRef(resolvedOptions)
 	const targetElementRef = useRef<HTMLElement | null>(null)
 	const containerElementRef = useRef<HTMLElement | null>(null)
@@ -77,7 +82,9 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 	const isSafeZoneEnteredRef = useRef(false)
 
 	const [targetElement, setTargetElementState] = useState<HTMLElement | null>(null)
+
 	const [containerElement, setContainerElementState] = useState<HTMLElement | null>(null)
+
 	const [overlayState, setOverlayState] = useState<HoverSafeZoneOverlayState | null>(null)
 
 	useIsomorphicLayoutEffect(() => {
@@ -102,7 +109,7 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 		setContainerElementState(element)
 	}, [])
 
-	const logEvent = useCallback((_area: string, _event: string, _details?: unknown) => undefined, [])
+	const logEvent = useCallback<LogEvent>(() => undefined, [])
 
 	const updateOverlayState = useCallback((nextOverlayState: HoverSafeZoneOverlayState | null) => {
 		if (isSameOverlayState(overlayStateRef.current, nextOverlayState)) {
@@ -110,6 +117,7 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 		}
 
 		overlayStateRef.current = nextOverlayState
+
 		setOverlayState(nextOverlayState)
 	}, [])
 
@@ -121,6 +129,7 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 		}
 
 		ownerWindow.clearTimeout(timeoutTimerRef.current)
+
 		timeoutTimerRef.current = null
 		logEvent("timeout", "clear")
 	}, [logEvent])
@@ -133,6 +142,7 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 		}
 
 		ownerWindow.cancelAnimationFrame(updateFrameRef.current)
+
 		updateFrameRef.current = null
 		logEvent("overlay", "cancel-update")
 	}, [logEvent])
@@ -146,7 +156,10 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 		isSafeZoneEnteredRef.current = false
 		stopSafeZoneTimers()
 		updateOverlayState(null)
-		logEvent("lifecycle", "hide", { mouse: mouseRef.current })
+
+		logEvent("lifecycle", "hide", {
+			mouse: mouseRef.current,
+		})
 	}, [logEvent, stopSafeZoneTimers, updateOverlayState])
 
 	const isPointerEventAllowed = useCallback(
@@ -158,9 +171,14 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 	const handleTimeoutClose = useCallback(() => {
 		timeoutTimerRef.current = null
 		isSafeZoneEnteredRef.current = false
+
 		updateOverlayState(null)
 		cancelOverlayUpdate()
-		logEvent("timeout", "timeout-close", { mouse: mouseRef.current })
+
+		logEvent("timeout", "timeout-close", {
+			mouse: mouseRef.current,
+		})
+
 		optionsRef.current.onTimeout?.()
 		optionsRef.current.onRequestClose?.()
 	}, [cancelOverlayUpdate, logEvent, updateOverlayState])
@@ -173,12 +191,16 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 		const ownerWindow = getOwnerWindow(targetElementRef.current ?? containerElementRef.current)
 
 		if (!ownerWindow || !currentOptions.isActive || currentOptions.isDisabled || currentOptions.timeout <= 0) {
-			logEvent("timeout", "skip", { mouse: mouseRef.current })
+			logEvent("timeout", "skip", {
+				mouse: mouseRef.current,
+			})
 
 			return
 		}
 
-		logEvent("timeout", "set", { mouse: mouseRef.current })
+		logEvent("timeout", "set", {
+			mouse: mouseRef.current,
+		})
 
 		timeoutTimerRef.current = ownerWindow.setTimeout(handleTimeoutClose, currentOptions.timeout)
 	}, [clearCloseTimeout, logEvent, handleTimeoutClose])
@@ -196,6 +218,7 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 					hasContainerElement: Boolean(container),
 				},
 			})
+
 			updateOverlayState(null)
 
 			return
@@ -210,13 +233,17 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 		})
 
 		if (!result) {
-			logEvent("overlay", "update-invalid", { mouse: mouseRef.current })
+			logEvent("overlay", "update-invalid", {
+				mouse: mouseRef.current,
+			})
+
 			updateOverlayState(null)
 
 			return
 		}
 
 		updateOverlayState(result.overlayState)
+
 		logEvent("overlay", "update", {
 			mouse: mouseRef.current,
 			overlayState: result.overlayState,
@@ -235,21 +262,29 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 		const ownerWindow = getOwnerWindow(targetElementRef.current ?? containerElementRef.current)
 
 		if (!ownerWindow || !currentOptions.isActive || currentOptions.isDisabled) {
-			logEvent("overlay", "schedule-skip", { mouse: mouseRef.current })
+			logEvent("overlay", "schedule-skip", {
+				mouse: mouseRef.current,
+			})
 
 			return
 		}
 
-		logEvent("overlay", "schedule", { mouse: mouseRef.current })
+		logEvent("overlay", "schedule", {
+			mouse: mouseRef.current,
+		})
 
 		updateFrameRef.current = ownerWindow.requestAnimationFrame(() => {
 			updateFrameRef.current = null
+
 			updateSafeZone()
 		})
 	}, [cancelOverlayUpdate, logEvent, updateSafeZone])
 
 	const requestClose = useCallback(() => {
-		logEvent("close", "request-close", { mouse: mouseRef.current })
+		logEvent("close", "request-close", {
+			mouse: mouseRef.current,
+		})
+
 		hideSafeZone()
 		optionsRef.current.onRequestClose?.()
 	}, [logEvent, hideSafeZone])
@@ -262,7 +297,9 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 				logEvent(origin, "activate-skip", {
 					mouse: getPoint(event),
 					point: getPointerCoordinates(event),
-					extra: { pointerType: event.pointerType },
+					extra: {
+						pointerType: event.pointerType,
+					},
 				})
 
 				return
@@ -293,7 +330,9 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 
 			mouseRef.current = getPoint(event)
 			originRef.current = "target"
+
 			hideSafeZone()
+
 			logEvent("target", "pointer-enter", {
 				mouse: mouseRef.current,
 				point: getPointerCoordinates(event),
@@ -310,8 +349,10 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 
 			mouseRef.current = getPoint(event)
 			originRef.current = "target"
+
 			clearCloseTimeout()
 			scheduleUpdateSafeZone()
+
 			logEvent("target", "pointer-move", {
 				mouse: mouseRef.current,
 				point: getPointerCoordinates(event),
@@ -327,8 +368,11 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 			}
 
 			const target = targetElementRef.current
+
 			const container = containerElementRef.current
+
 			const point = getPointerCoordinates(event)
+
 			const mouse = getPoint(event)
 
 			mouseRef.current = mouse
@@ -339,6 +383,7 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 					mouse,
 					point,
 				})
+
 				requestClose()
 
 				return
@@ -365,7 +410,9 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 			}
 
 			mouseRef.current = getPoint(event)
+
 			hideSafeZone()
+
 			logEvent("container", "pointer-enter", {
 				mouse: mouseRef.current,
 				point: getPointerCoordinates(event),
@@ -381,7 +428,9 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 			}
 
 			mouseRef.current = getPoint(event)
+
 			clearCloseTimeout()
+
 			logEvent("container", "pointer-move", {
 				mouse: mouseRef.current,
 				point: getPointerCoordinates(event),
@@ -397,8 +446,11 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 			}
 
 			const target = targetElementRef.current
+
 			const container = containerElementRef.current
+
 			const point = getPointerCoordinates(event)
+
 			const mouse = getPoint(event)
 
 			mouseRef.current = mouse
@@ -409,6 +461,7 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 					mouse,
 					point,
 				})
+
 				requestClose()
 
 				return
@@ -435,8 +488,11 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 			}
 
 			const currentOverlayState = overlayStateRef.current
+
 			const currentOptions = optionsRef.current
+
 			const target = targetElementRef.current
+
 			const container = containerElementRef.current
 
 			if (
@@ -450,13 +506,16 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 			}
 
 			const point = getPointerCoordinates(event)
+
 			const mouse = getPoint(event)
 
 			if (isPointInsideElement(target, point)) {
 				mouseRef.current = mouse
 				originRef.current = "target"
+
 				clearCloseTimeout()
 				scheduleUpdateSafeZone()
+
 				logEvent("document", "pointer-move-target", { mouse, point })
 
 				return
@@ -464,7 +523,9 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 
 			if (isPointInsideElement(container, point)) {
 				mouseRef.current = mouse
+
 				hideSafeZone()
+
 				logEvent("document", "pointer-move-container", {
 					mouse,
 					point,
@@ -475,8 +536,10 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 
 			if (isPointInsideExpandedElement(container, point, currentOptions.padding)) {
 				mouseRef.current = mouse
+
 				resetCloseTimeout()
 				scheduleUpdateSafeZone()
+
 				logEvent("document", "pointer-move-expanded-container", {
 					mouse,
 					point,
@@ -490,6 +553,7 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 					mouse,
 					point,
 				})
+
 				requestClose()
 
 				return
@@ -497,13 +561,22 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 
 			const svgElement = svgRef.current
 			const pathElement = pathRef.current
+
 			const isInsideSafeZone =
-				svgElement && pathElement ? isPointInsideSvgPath({ svgElement, pathElement, point }) : null
+				svgElement && pathElement
+					? isPointInsideSvgPath({
+							svgElement,
+							pathElement,
+							point,
+						})
+					: null
 
 			logEvent("document", "pointer-move", {
 				mouse,
 				point,
-				extra: { isInsideSafeZone },
+				extra: {
+					isInsideSafeZone,
+				},
 			})
 
 			if (isInsideSafeZone === null) {
@@ -512,6 +585,7 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 
 			if (!isInsideSafeZone) {
 				isSafeZoneEnteredRef.current = false
+
 				requestClose()
 
 				return
@@ -522,6 +596,7 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 
 			if (!isSafeZoneEnteredRef.current) {
 				isSafeZoneEnteredRef.current = true
+
 				currentOptions.onSafeZoneEnter?.()
 			}
 
@@ -551,7 +626,9 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 
 			mouseRef.current = mouse
 			resetCloseTimeout()
+
 			logEvent("safe-zone", "pointer-enter", { mouse, point })
+
 			optionsRef.current.onSafeZoneEnter?.()
 		},
 		[logEvent, isPointerEventAllowed, resetCloseTimeout],
@@ -569,7 +646,9 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 
 			mouseRef.current = mouse
 			resetCloseTimeout()
+
 			logEvent("safe-zone", "pointer-move", { mouse, point })
+
 			optionsRef.current.onSafeZoneMove?.()
 			scheduleUpdateSafeZone()
 		},
@@ -585,6 +664,7 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 			}
 
 			const { point, mouse } = getReactPointerData(event)
+
 			const action = getPointerLeaveAction({
 				targetElement: targetElementRef.current,
 				containerElement: containerElementRef.current,
@@ -593,6 +673,7 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 			})
 
 			mouseRef.current = mouse
+
 			logEvent("safe-zone", "pointer-leave", {
 				mouse,
 				point,
@@ -638,12 +719,16 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 		}
 
 		targetElement.addEventListener("pointerenter", handleTargetPointerEnter)
+
 		targetElement.addEventListener("pointermove", handleTargetPointerMove)
+
 		targetElement.addEventListener("pointerleave", handleTargetPointerLeave)
 
 		return () => {
 			targetElement.removeEventListener("pointerenter", handleTargetPointerEnter)
+
 			targetElement.removeEventListener("pointermove", handleTargetPointerMove)
+
 			targetElement.removeEventListener("pointerleave", handleTargetPointerLeave)
 		}
 	}, [
@@ -661,12 +746,16 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 		}
 
 		containerElement.addEventListener("pointerenter", handleContainerPointerEnter)
+
 		containerElement.addEventListener("pointermove", handleContainerPointerMove)
+
 		containerElement.addEventListener("pointerleave", handleContainerPointerLeave)
 
 		return () => {
 			containerElement.removeEventListener("pointerenter", handleContainerPointerEnter)
+
 			containerElement.removeEventListener("pointermove", handleContainerPointerMove)
+
 			containerElement.removeEventListener("pointerleave", handleContainerPointerLeave)
 		}
 	}, [
@@ -713,19 +802,28 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 				return
 			}
 
-			logEvent("lifecycle", "window-update", { mouse: mouseRef.current })
+			logEvent("lifecycle", "window-update", {
+				mouse: mouseRef.current,
+			})
+
 			scheduleUpdateSafeZone()
 		}
 
 		ownerWindow.addEventListener("resize", handleWindowUpdate)
+
 		ownerWindow.addEventListener("scroll", handleWindowUpdate, true)
+
 		ownerWindow.visualViewport?.addEventListener("resize", handleWindowUpdate)
+
 		ownerWindow.visualViewport?.addEventListener("scroll", handleWindowUpdate)
 
 		return () => {
 			ownerWindow.removeEventListener("resize", handleWindowUpdate)
+
 			ownerWindow.removeEventListener("scroll", handleWindowUpdate, true)
+
 			ownerWindow.visualViewport?.removeEventListener("resize", handleWindowUpdate)
+
 			ownerWindow.visualViewport?.removeEventListener("scroll", handleWindowUpdate)
 		}
 	}, [
@@ -749,6 +847,7 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 		}
 
 		const ownerWindow = getOwnerWindow(targetElement)
+
 		const ResizeObserverConstructor: typeof ResizeObserver | undefined =
 			ownerWindow?.ResizeObserver ?? (typeof ResizeObserver === "undefined" ? undefined : ResizeObserver)
 
@@ -764,10 +863,12 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 			logEvent("lifecycle", "element-resize", {
 				mouse: mouseRef.current,
 			})
+
 			scheduleUpdateSafeZone()
 		}
 
 		const resizeObserver = new ResizeObserverConstructor(handleElementResize)
+
 		resizeObserver.observe(targetElement)
 		resizeObserver.observe(containerElement)
 
