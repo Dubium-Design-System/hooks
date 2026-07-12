@@ -1,33 +1,62 @@
-import { type RefObject, useEffect, useRef } from "react"
-
-type EventListenerOptions = AddEventListenerOptions | boolean
-
-type EventListenerTarget = EventTarget | null | RefObject<EventTarget | null> | string | undefined
+import { useEffect, useRef } from "react"
 
 /**
- * Свойства для хука useEventListener.
+ * Цель для подписки на события.
  */
-export interface UseEventListenerProps<TEvent extends Event = Event> {
-	/** Функция-обработчик события. */
-	listener: (event: TEvent) => void
+export type TEventListenerTarget = "document" | "window" | EventTarget | null
 
-	/** Опции для addEventListener. */
-	options?: EventListenerOptions
-
-	/** Цель подписки. По умолчанию `"document"`. */
-	target?: EventListenerTarget
-
-	/** Тип события, например `"click"` или `"scroll"`. */
-	type: string
-
-	/** Если `false`, обработчик не подписывается. */
+/**
+ * Базовые опции подписки на события.
+ */
+interface IUseEventListenerBaseOptions {
+	/** Флаг использования фазы capture (перехвата). */
+	capture?: boolean
+	/** Флаг однократного выполнения события. */
+	once?: boolean
+	/** Флаг пассивного слушателя. */
+	passive?: boolean
+	/** Цель для подписки на событие. */
+	target?: TEventListenerTarget
+	/** Флаг активности подписки. */
 	when?: boolean
 }
 
 /**
- * Разрешает цель для подписки на событие.
+ * Опции подписки на события для произвольного EventTarget.
  */
-const resolveTarget = (target: EventListenerTarget = "document"): EventTarget | null => {
+export interface IUseEventListenerOptions<TEvent extends Event = Event> extends IUseEventListenerBaseOptions {
+	/** Обработчик события. */
+	listener: (event: TEvent) => void
+	/** Тип события. */
+	type: string
+}
+
+/** Опции подписки на события окна. */
+type TWindowEventListenerOptions<K extends keyof WindowEventMap> = IUseEventListenerBaseOptions & {
+	listener: (event: WindowEventMap[K]) => void
+	target: "window"
+	type: K
+}
+
+/** Опции подписки на события документа. */
+type TDocumentEventListenerOptions<K extends keyof DocumentEventMap> = IUseEventListenerBaseOptions & {
+	listener: (event: DocumentEventMap[K]) => void
+	target?: "document"
+	type: K
+}
+
+/**
+ * Разрешает цель подписки: преобразует строковые значения "document"/"window"
+ * в соответствующие глобальные объекты.
+ *
+ * @param target - Цель подписки.
+ * @returns EventTarget или null, если цель недоступна.
+ */
+const resolveTarget = (target: TEventListenerTarget): EventTarget | null => {
+	if (target !== "document" && target !== "window") {
+		return target
+	}
+
 	if (typeof window === "undefined") {
 		return null
 	}
@@ -36,38 +65,31 @@ const resolveTarget = (target: EventListenerTarget = "document"): EventTarget | 
 		return window
 	}
 
-	if (target === "document") {
-		return document
-	}
-
-	if (typeof target === "string") {
-		return document.querySelector(target)
-	}
-
-	if (target && "current" in target) {
-		return target.current
-	}
-
-	return target ?? null
+	return document
 }
 
 /**
- * Хук для подписки на DOM-события с автоматической очисткой.
+ * Подписывается на события DOM с автоматической очисткой.
  *
- * @typeParam TEvent - Тип события.
- * @param props.type - Тип события (например, "click" или "scroll").
- * @param props.listener - Функция-обработчик события.
- * @param props.target - Цель подписки. По умолчанию `"document"`.
- * @param props.options - Опции для addEventListener.
- * @param props.when - Если `false`, обработчик не подписывается.
+ * Поддерживает типизированные события для window и document,
+ * а также произвольные EventTarget. Автоматически обновляет
+ * listener при его изменении.
+ *
+ * @param options - Опции подписки на события.
  */
-export const useEventListener = <TEvent extends Event = Event>({
+export function useEventListener<K extends keyof WindowEventMap>(options: TWindowEventListenerOptions<K>): void
+export function useEventListener<K extends keyof DocumentEventMap>(options: TDocumentEventListenerOptions<K>): void
+export function useEventListener<TEvent extends Event = Event>(options: IUseEventListenerOptions<TEvent>): void
+export function useEventListener<TEvent extends Event = Event>({
+	capture = false,
+	listener,
+	once = false,
+	passive = false,
 	target = "document",
 	type,
-	listener,
-	options,
 	when = true,
-}: UseEventListenerProps<TEvent>): void => {
+}: IUseEventListenerOptions<TEvent>): void {
+	/** Ref для хранения актуального обработчика. */
 	const listenerRef = useRef(listener)
 
 	useEffect(() => {
@@ -75,16 +97,27 @@ export const useEventListener = <TEvent extends Event = Event>({
 	}, [listener])
 
 	useEffect(() => {
-		const resolvedTarget = when ? resolveTarget(target) : null
+		if (!when) {
+			return undefined
+		}
 
+		const resolvedTarget = resolveTarget(target)
+
+		if (!resolvedTarget) {
+			return undefined
+		}
+
+		/** Обработчик события, вызывающий актуальный listener из ref. */
 		const eventListener = (event: Event): void => {
 			listenerRef.current(event as TEvent)
 		}
 
-		resolvedTarget?.addEventListener(type, eventListener, options)
+		const options: AddEventListenerOptions = { capture, once, passive }
+
+		resolvedTarget.addEventListener(type, eventListener, options)
 
 		return () => {
-			resolvedTarget?.removeEventListener(type, eventListener, options)
+			resolvedTarget.removeEventListener(type, eventListener, capture)
 		}
-	}, [target, type, options, when])
+	}, [capture, once, passive, target, type, when])
 }

@@ -11,16 +11,16 @@ export { HoverSafeZoneArea } from "./components/HoverSafeZoneArea"
 export { useHoverSafeZoneArea } from "./hooks/useHoverSafeZoneArea"
 
 export type {
-	HoverSafeZoneAreaChildrenProps,
-	HoverSafeZoneAreaProps,
-	HoverSafeZoneOrigin,
-	HoverSafeZoneOverlayState,
-	HoverSafeZonePlacementSide,
-	HoverSafeZonePointerType,
-	Point,
-	PointerCoordinates,
-	RectLike,
-	RectPoints,
-	UseHoverSafeZoneAreaOptions,
-	UseHoverSafeZoneAreaResult,
+	IHoverSafeZoneAreaChildrenProps,
+	IHoverSafeZoneAreaProps,
+	IHoverSafeZoneOverlayState,
+	IPointerCoordinates,
+	IRectLike,
+	IRectPoints,
+	IUseHoverSafeZoneAreaOptions,
+	IUseHoverSafeZoneAreaResult,
+	THoverSafeZoneOrigin,
+	THoverSafeZonePlacementSide,
+	THoverSafeZonePointerType,
+	TPoint,
 } from "./useHoverSafeZoneArea.types"

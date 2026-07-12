@@ -1,66 +1,100 @@
-import { useEffect, useState } from "react"
+import { useMemo, useSyncExternalStore } from "react"
 
 /**
  * Размеры окна браузера.
  */
-interface WindowSize {
-	/** Высота окна в пикселях. */
+export interface IWindowSize {
+	/** Высота окна. */
 	height: number
-	/** Ширина окна в пикселях. */
+	/** Ширина окна. */
 	width: number
 }
 
+/** Размеры окна по умолчанию для SSR. */
+const SERVER_SIZE: IWindowSize = Object.freeze({ height: 0, width: 0 })
+/** Сериализованные размеры для SSR. */
+const SERVER_SNAPSHOT = JSON.stringify(SERVER_SIZE)
+
 /**
- * Возвращает текущие размеры окна браузера.
- * При SSR возвращает нулевые значения.
+ * Читает текущие размеры окна.
  *
- * @returns Объект с шириной и высотой окна.
+ * @returns Текущие размеры окна.
  */
-const getWindowSize = (): WindowSize => {
+const readWindowSize = (): IWindowSize => {
 	if (typeof window === "undefined") {
-		return {
-			width: 0,
-			height: 0,
-		}
+		return SERVER_SIZE
 	}
 
 	return {
-		width: window.innerWidth,
 		height: window.innerHeight,
+		width: window.innerWidth,
 	}
 }
 
 /**
- * Хук для отслеживания размеров окна браузера.
+ * Возвращает сериализованный снимок размеров окна.
  *
- * Автоматически обновляется при изменении размеров окна (resize).
- * При SSR возвращает `{ width: 0, height: 0 }`.
- *
- * @returns Текущие ширина и высота окна.
- *
- * @example
- * ```tsx
- * const { width, height } = useWindowSize();
- *
- * return <div>Ширина: {width}px, Высота: {height}px</div>;
- * ```
+ * @returns JSON-строка размеров окна.
  */
-export const useWindowSize = (): WindowSize => {
-	const [windowSize, setWindowSize] = useState<WindowSize>(() => {
-		return getWindowSize()
-	})
+const getSnapshot = (): string => {
+	return JSON.stringify(readWindowSize())
+}
 
-	useEffect(() => {
-		const handleResize = () => {
-			setWindowSize(getWindowSize())
+/**
+ * Подписывается на изменения размеров окна с троттлингом через requestAnimationFrame.
+ *
+ * @param onStoreChange - Колбэк при изменении размеров.
+ * @returns Функция отписки.
+ */
+const subscribe = (onStoreChange: VoidFunction): VoidFunction => {
+	if (typeof window === "undefined") {
+		return () => undefined
+	}
+
+	let frameId: null | number = null
+
+	/** Планирует обновление на следующий animation frame. */
+	const scheduleUpdate = (): void => {
+		if (frameId !== null) {
+			return
 		}
 
-		window.addEventListener("resize", handleResize)
+		frameId = window.requestAnimationFrame(() => {
+			frameId = null
+			onStoreChange()
+		})
+	}
 
-		return () => {
-			window.removeEventListener("resize", handleResize)
+	window.addEventListener("resize", scheduleUpdate)
+
+	if (window.visualViewport) {
+		window.visualViewport.addEventListener("resize", scheduleUpdate)
+	}
+
+	return () => {
+		window.removeEventListener("resize", scheduleUpdate)
+
+		if (window.visualViewport) {
+			window.visualViewport.removeEventListener("resize", scheduleUpdate)
 		}
-	}, [])
 
-	return windowSize
+		if (frameId !== null) {
+			window.cancelAnimationFrame(frameId)
+		}
+	}
+}
+
+/**
+ * Отслеживает размеры окна браузера.
+ *
+ * Использует `useSyncExternalStore` для реактивного отслеживания
+ * размеров окна с троттлингом через requestAnimationFrame.
+ * Поддерживает visualViewport для мобильных браузеров.
+ *
+ * @returns Текущие размеры окна.
+ */
+export const useWindowSize = (): IWindowSize => {
+	const serializedSize = useSyncExternalStore(subscribe, getSnapshot, () => SERVER_SNAPSHOT)
+
+	return useMemo(() => JSON.parse(serializedSize) as IWindowSize, [serializedSize])
 }

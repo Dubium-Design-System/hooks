@@ -2,7 +2,10 @@ import { useCallback } from "react"
 
 import { useIsomorphicLayoutEffect } from "./useIsomorphicLayoutEffect"
 
-interface UseAutoUpdateParams {
+/**
+ * Параметры для автообновления позиции floating-элемента.
+ */
+interface IUseAutoUpdateParams {
 	/** Флаг активности автообновления. */
 	enabled: boolean
 	/** Floating-элемент. */
@@ -18,7 +21,7 @@ interface UseAutoUpdateParams {
  *
  * @param params - Параметры автообновления.
  */
-export const useAutoUpdate = ({ enabled, floatingElement, referenceElement, update }: UseAutoUpdateParams): void => {
+export const useAutoUpdate = ({ enabled, floatingElement, referenceElement, update }: IUseAutoUpdateParams): void => {
 	const handleUpdate = useCallback(() => {
 		update()
 	}, [update])
@@ -33,8 +36,10 @@ export const useAutoUpdate = ({ enabled, floatingElement, referenceElement, upda
 		window.addEventListener("scroll", handleUpdate, true)
 		window.addEventListener("resize", handleUpdate)
 
-		window.visualViewport?.addEventListener("resize", handleUpdate)
-		window.visualViewport?.addEventListener("scroll", handleUpdate)
+		if (window.visualViewport) {
+			window.visualViewport.addEventListener("resize", handleUpdate)
+			window.visualViewport.addEventListener("scroll", handleUpdate)
+		}
 
 		let resizeObserver: null | ResizeObserver = null
 
@@ -49,10 +54,14 @@ export const useAutoUpdate = ({ enabled, floatingElement, referenceElement, upda
 			window.removeEventListener("scroll", handleUpdate, true)
 			window.removeEventListener("resize", handleUpdate)
 
-			window.visualViewport?.removeEventListener("resize", handleUpdate)
-			window.visualViewport?.removeEventListener("scroll", handleUpdate)
+			if (window.visualViewport) {
+				window.visualViewport.removeEventListener("resize", handleUpdate)
+				window.visualViewport.removeEventListener("scroll", handleUpdate)
+			}
 
-			resizeObserver?.disconnect()
+			if (resizeObserver) {
+				resizeObserver.disconnect()
+			}
 		}
 	}, [enabled, floatingElement, handleUpdate, referenceElement])
 }

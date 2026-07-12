@@ -1,55 +1,68 @@
-import { type DependencyList, useEffect, useRef } from "react"
+import { type DependencyList, type EffectCallback, useEffect, useRef } from "react"
 
-type CleanupFn = () => void
-type EffectFn = () => CleanupFn | void
-
-const areDependenciesEqual = (previousDeps: DependencyList, nextDeps: DependencyList): boolean => {
+/**
+ * Сравнивает зависимости по тем же базовым правилам, что и React:
+ * длина массива должна совпадать, значения сравниваются через Object.is.
+ */
+const areDependenciesEqual = (previousDependencies: DependencyList, nextDependencies: DependencyList): boolean => {
 	return (
-		previousDeps.length === nextDeps.length &&
-		previousDeps.every((dependency, index) => Object.is(dependency, nextDeps[index]))
+		previousDependencies.length === nextDependencies.length &&
+		previousDependencies.every((dependency, index) => Object.is(dependency, nextDependencies[index]))
 	)
 }
 
 /**
- * Хук, имитирующий поведение componentDidUpdate.
+ * Выполняет эффект при изменении зависимостей, пропуская монтирование.
  *
- * Выполняет функцию `fn` только при обновлении зависимостей, пропуская первый рендер (монтаж).
- *
- * @param fn - Функция-эффект, вызываемая при изменении зависимостей (кроме первого рендера).
- *             Может возвращать функцию очистки.
- * @param deps - Массив зависимостей, при изменении которых будет вызван `fn`.
- *
- * @example
- * useUpdateEffect(() => {
- *   console.log('Это не сработает при первом рендере, но сработает при обновлениях deps');
- * }, [someValue]);
+ * @param effect - Эффект, выполняемый при изменении зависимостей.
+ * @param dependencies - Массив зависимостей эффекта.
  */
-export const useUpdateEffect = (fn: EffectFn, deps: DependencyList): void => {
-	const mountedRef = useRef(false)
-	const previousDepsRef = useRef<DependencyList>([])
-	const cleanupRef = useRef<CleanupFn | undefined>(undefined)
+export const useUpdateEffect = (effect: EffectCallback, dependencies: DependencyList): void => {
+	const effectRef = useRef(effect)
+	const previousDependenciesRef = useRef<DependencyList | null>(null)
+	const cleanupRef = useRef<ReturnType<EffectCallback>>(undefined)
 
+	/*
+	 * Обновляется перед основным эффектом, поэтому при изменении зависимостей
+	 * будет вызвана актуальная версия callback.
+	 */
 	useEffect(() => {
-		if (!mountedRef.current) {
-			mountedRef.current = true
-			previousDepsRef.current = [...deps]
-		} else if (!areDependenciesEqual(previousDepsRef.current, deps)) {
-			cleanupRef.current?.()
-			cleanupRef.current = undefined
-
-			previousDepsRef.current = [...deps]
-
-			const cleanup = fn()
-
-			if (cleanup) {
-				cleanupRef.current = cleanup
-			}
-		}
+		effectRef.current = effect
 	})
 
+	/*
+	 * Намеренно запускается после каждого render.
+	 * Необходимость запуска пользовательского эффекта определяется вручную.
+	 */
 	useEffect(() => {
-		return () => {
-			cleanupRef.current?.()
+		const previousDependencies = previousDependenciesRef.current
+
+		previousDependenciesRef.current = dependencies
+
+		if (previousDependencies === null || areDependenciesEqual(previousDependencies, dependencies)) {
+			return
 		}
-	}, [])
+
+		if (cleanupRef.current) {
+			cleanupRef.current()
+		}
+
+		const cleanup = effectRef.current()
+
+		cleanupRef.current = typeof cleanup === "function" ? cleanup : undefined
+	})
+
+	/*
+	 * Выполняет последнюю cleanup-функцию при размонтировании.
+	 */
+	useEffect(
+		() => () => {
+			if (cleanupRef.current) {
+				cleanupRef.current()
+			}
+
+			cleanupRef.current = undefined
+		},
+		[],
+	)
 }

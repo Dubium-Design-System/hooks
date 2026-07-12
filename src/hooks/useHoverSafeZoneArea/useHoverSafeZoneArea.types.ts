@@ -1,16 +1,37 @@
 import type { ReactNode, RefCallback } from "react"
 
-export type Point = [number, number]
-export type HoverSafeZoneOrigin = "container" | "target"
-export type HoverSafeZonePlacementSide = "bottom" | "left" | "right" | "top"
-export type HoverSafeZonePointerType = "mouse" | "pen" | "touch"
+/**
+ * Точка с координатами [x, y].
+ */
+export type TPoint = [number, number]
 
-export interface PointerCoordinates {
+/**
+ * Источник активации безопасной зоны: container или target.
+ */
+export type THoverSafeZoneOrigin = "container" | "target"
+
+/**
+ * Сторона расположения контейнера относительно target-элемента.
+ */
+export type THoverSafeZonePlacementSide = "bottom" | "left" | "right" | "top"
+
+/**
+ * Тип указателя для отслеживания в безопасной зоне.
+ */
+export type THoverSafeZonePointerType = "mouse" | "pen" | "touch"
+
+/**
+ * Координаты указателя.
+ */
+export interface IPointerCoordinates {
 	clientX: number
 	clientY: number
 }
 
-export interface RectLike {
+/**
+ * Прямоугольная область.
+ */
+export interface IRectLike {
 	bottom: number
 	height: number
 	left: number
@@ -19,27 +40,40 @@ export interface RectLike {
 	width: number
 }
 
-export interface RectPoints {
-	bottomLeft: Point
-	bottomRight: Point
-	topLeft: Point
-	topRight: Point
+/**
+ * Четыре угла прямоугольника.
+ */
+export interface IRectPoints {
+	bottomLeft: TPoint
+	bottomRight: TPoint
+	topLeft: TPoint
+	topRight: TPoint
 }
 
-export interface HoverSafeZoneOverlayBounds {
+/**
+ * Границы оверлея безопасной зоны.
+ */
+export interface IHoverSafeZoneOverlayBounds {
 	height: number
 	left: number
 	top: number
 	width: number
 }
 
-export interface HoverSafeZoneOverlayState {
-	bounds: HoverSafeZoneOverlayBounds
-	clipPath: string
+/**
+ * Состояние оверлея безопасной зоны.
+ */
+export interface IHoverSafeZoneOverlayState {
+	/** Границы оверлея. */
+	bounds: IHoverSafeZoneOverlayBounds
+	/** SVG path безопасной зоны. */
 	safeZonePath: string
 }
 
-export interface UseHoverSafeZoneAreaOptions {
+/**
+ * Опции хука `useHoverSafeZoneArea`.
+ */
+export interface IUseHoverSafeZoneAreaOptions {
 	/** Флаг активности логики безопасной зоны. */
 	isActive: boolean
 	/** При `true` отключает все взаимодействия безопасной зоны. */
@@ -55,22 +89,35 @@ export interface UseHoverSafeZoneAreaOptions {
 	/** Отступ вокруг target/container. По умолчанию `16`. */
 	padding?: number
 	/** Типы указателя, для которых работает safe-zone. По умолчанию только `mouse`. */
-	pointerTypes?: HoverSafeZonePointerType[]
+	pointerTypes?: THoverSafeZonePointerType[]
 	/** Время до авто-закрытия safe-zone. По умолчанию `1500`. */
 	timeout?: number
 }
 
-export interface UseHoverSafeZoneAreaResult {
+/**
+ * Возвращаемое значение хука `useHoverSafeZoneArea`.
+ */
+export interface IUseHoverSafeZoneAreaResult {
+	/** Ref callback для container-элемента. */
 	containerRef: RefCallback<HTMLElement>
-	elementToRender: ReactNode
+	/** Ref callback для target-элемента. */
 	targetRef: RefCallback<HTMLElement>
 }
 
-export interface HoverSafeZoneAreaChildrenProps {
+/**
+ * Свойства, передаваемые в render-prop функцию компонента HoverSafeZoneArea.
+ */
+export interface IHoverSafeZoneAreaChildrenProps {
+	/** Ref callback для container-элемента. */
 	containerRef: RefCallback<HTMLElement>
+	/** Ref callback для target-элемента. */
 	targetRef: RefCallback<HTMLElement>
 }
 
-export interface HoverSafeZoneAreaProps extends UseHoverSafeZoneAreaOptions {
-	children: (props: HoverSafeZoneAreaChildrenProps) => ReactNode
+/**
+ * Свойства компонента HoverSafeZoneArea.
+ */
+export interface IHoverSafeZoneAreaProps extends IUseHoverSafeZoneAreaOptions {
+	/** Render-prop функция, получающая ref-ы для target и container. */
+	children: (props: IHoverSafeZoneAreaChildrenProps) => ReactNode
 }

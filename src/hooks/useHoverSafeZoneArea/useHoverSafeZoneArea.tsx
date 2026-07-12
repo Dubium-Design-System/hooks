@@ -3,10 +3,11 @@
  *
  * Создаёт невидимую область между target- и container-элементами,
  * предотвращающую ложное закрытие всплывающих элементов.
+ * SVG для hit-test создаётся и удаляется внутри хука автоматически.
  *
  * @example
  * ```tsx
- * const { targetRef, containerRef, elementToRender } = useHoverSafeZoneArea({
+ * const { targetRef, containerRef } = useHoverSafeZoneArea({
  *   isActive: isOpen,
  *   onRequestClose: () => setIsOpen(false),
  * });

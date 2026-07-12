@@ -1,4 +1,4 @@
-import type { FloatingSide } from "../useFloatingPosition.types"
+import type { TFloatingSide } from "../useFloatingPosition.types"
 
 /**
  * Возвращает противоположную сторону для placement.
@@ -6,7 +6,7 @@ import type { FloatingSide } from "../useFloatingPosition.types"
  * @param side - Исходная сторона.
  * @returns Противоположная сторона.
  */
-export const getOppositeSide = (side: FloatingSide): FloatingSide => {
+export const getOppositeSide = (side: TFloatingSide): TFloatingSide => {
 	if (side === "top") {
 		return "bottom"
 	}

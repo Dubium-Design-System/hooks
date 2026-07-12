@@ -1,26 +1,37 @@
 import {
+	type ChangeEventHandler,
+	type ClipboardEventHandler,
+	type FocusEventHandler,
 	type InputHTMLAttributes,
-	type Ref,
+	type KeyboardEventHandler,
+	type RefCallback,
 	useCallback,
 	useEffect,
-	useImperativeHandle,
+	useMemo,
 	useRef,
 	useState,
 } from "react"
 
 /**
- * Массив значений для каждого поля ввода PIN.
+ * Тип вводимых символов: только цифры или буквы/цифры.
  */
-type PinInputValues = string[]
+export type TPinInputType = "alphanumeric" | "numeric"
 
-type NativeInputProps = Omit<
+/**
+ * Массив значений полей PIN-кода.
+ */
+export type TPinInputValues = string[]
+
+/** Нативные свойства input, исключая переопределяемые. */
+type TNativeInputProps = Omit<
 	InputHTMLAttributes<HTMLInputElement>,
 	| "autoComplete"
 	| "disabled"
 	| "inputMode"
+	| "maxLength"
 	| "onBlur"
+	| "onChange"
 	| "onFocus"
-	| "onInput"
 	| "onKeyDown"
 	| "onPaste"
 	| "placeholder"
@@ -29,522 +40,500 @@ type NativeInputProps = Omit<
 	| "value"
 >
 
-type PinInputHandler = NonNullable<InputHTMLAttributes<HTMLInputElement>["onInput"]>
-
-type PinInputKeyboardHandler = NonNullable<InputHTMLAttributes<HTMLInputElement>["onKeyDown"]>
-
-type PinInputFocusHandler = NonNullable<InputHTMLAttributes<HTMLInputElement>["onFocus"]>
-
-type PinInputBlurHandler = NonNullable<InputHTMLAttributes<HTMLInputElement>["onBlur"]>
-
-type PinInputPasteHandler = NonNullable<InputHTMLAttributes<HTMLInputElement>["onPaste"]>
-
 /**
- * Действия, доступные извне через `ref`.
+ * Свойства отдельного поля ввода PIN-кода.
  */
-export interface PinInputActions {
-	/**
-	 * Убрать фокус со всех полей.
-	 */
-	blur: () => void
-
-	/**
-	 * Установить фокус на поле.
-	 *
-	 * @param index Индекс поля, по умолчанию 0.
-	 */
-	focus: (index?: number) => void
+export interface IPinInputFieldProps extends TNativeInputProps {
+	autoComplete: "off" | "one-time-code"
+	disabled: boolean
+	inputMode: "numeric" | "text"
+	maxLength: number
+	onBlur?: FocusEventHandler<HTMLInputElement>
+	onChange?: ChangeEventHandler<HTMLInputElement>
+	onFocus?: FocusEventHandler<HTMLInputElement>
+	onKeyDown?: KeyboardEventHandler<HTMLInputElement>
+	onPaste?: ClipboardEventHandler<HTMLInputElement>
+	placeholder: string
+	ref: RefCallback<HTMLInputElement>
+	type: "password" | "text"
+	value: string
 }
 
 /**
  * Опции хука `usePinInput`.
  */
-export interface UsePinInputProps {
-	/**
-	 * Ссылка на методы управления фокусом.
-	 */
-	actionRef?: Ref<PinInputActions>
-
-	/**
-	 * Автоматически установить фокус на первое поле.
-	 */
+export interface IUsePinInputOptions {
+	/** Флаг автоматического фокуса на первом поле. */
 	autoFocus?: boolean
-
-	/**
-	 * Задержка перед вызовом `onComplete`.
-	 */
+	/** Задержка перед вызовом onComplete после заполнения всех полей. */
 	completeDelay?: number
-
-	/**
-	 * Значения по умолчанию для неконтролируемого режима.
-	 *
-	 * @example Array(4).fill("")
-	 */
-	defaultValues?: PinInputValues
-
-	/**
-	 * Отключить все поля ввода.
-	 */
+	/** Значение по умолчанию. */
+	defaultValue?: readonly string[]
+	/** Флаг отключения полей ввода. */
 	disabled?: boolean
-
-	/**
-	 * Индикатор ошибки.
-	 */
-	error?: boolean
-
-	/**
-	 * Фокусировать первое пустое поле при ошибке.
-	 */
-	focusFirstEmptyOnError?: boolean
-
-	/**
-	 * Количество полей.
-	 */
+	/** Флаг фокуса на первом пустом поле при invalid. */
+	focusOnInvalid?: boolean
+	/** Флаг невалидного состояния. */
+	invalid?: boolean
+	/** Количество полей PIN-кода. */
 	length?: number
-
-	/**
-	 * Скрывать символы ввода.
-	 */
+	/** Флаг маскирования ввода (password). */
 	mask?: boolean
-
-	/**
-	 * Колбэк при изменении значений.
-	 *
-	 * @param values Текущие значения полей.
-	 */
-	onChange?: (values: PinInputValues) => void
-
-	/**
-	 * Колбэк при полном заполнении всех полей.
-	 *
-	 * @param value Объединённое значение PIN-кода.
-	 */
+	/** Колбэк при полном заполнении PIN-кода. */
 	onComplete?: (value: string) => void
-
-	/**
-	 * Использовать автозаполнение OTP.
-	 */
+	/** Колбэк при изменении значения. */
+	onValueChange?: (values: TPinInputValues) => void
+	/** Флаг OTP-автозаполнения. */
 	otp?: boolean
-
-	/**
-	 * Символ-плейсхолдер для пустых полей.
-	 */
+	/** Placeholder для пустых полей. */
 	placeholder?: string
-
-	/**
-	 * Тип ввода.
-	 */
-	type?: "alphanumeric" | "numeric"
-
-	/**
-	 * Значения для контролируемого режима.
-	 */
-	values?: PinInputValues
+	/** Тип вводимых символов. */
+	type?: TPinInputType
+	/** Контролируемое значение. */
+	value?: readonly string[]
 }
 
 /**
- * Опции для метода очистки полей.
+ * Опции для очистки полей PIN-кода.
  */
-export interface PinInputClearOptions {
-	/**
-	 * Установить фокус на первое поле после очистки.
-	 */
+export interface IPinInputClearOptions {
+	/** Флаг фокуса на первом поле после очистки. */
 	focus?: boolean
 }
 
 /**
- * Свойства отдельного поля PIN-ввода.
+ * Возвращаемое значение хука `usePinInput`.
  */
-export interface PinInputFieldProps extends NativeInputProps {
-	autoComplete: "off" | "one-time-code"
-	disabled: boolean
-	inputMode: "numeric" | "text"
-	onBlur?: PinInputBlurHandler
-	onFocus?: PinInputFocusHandler
-	onInput?: PinInputHandler
-	onKeyDown?: PinInputKeyboardHandler
-	onPaste?: PinInputPasteHandler
-	placeholder: string
-
-	/**
-	 * Реф для установки ссылки на поле.
-	 */
-	ref: (node: HTMLInputElement | null) => void
-
-	type: "password" | "text"
-
-	/**
-	 * Значение поля.
-	 */
-	value: string
+export interface IUsePinInputReturn {
+	/** Убирает фокус со всех полей. */
+	blur: VoidFunction
+	/** Очищает все поля. */
+	clear: (options?: IPinInputClearOptions) => void
+	/** Массив свойств для полей ввода. */
+	fields: IPinInputFieldProps[]
+	/** Устанавливает фокус на указанное поле. */
+	focus: (index?: number) => void
+	/** Индекс поля, находящегося в фокусе. */
+	focusedIndex: number
+	/** Флаг полного заполнения PIN-кода. */
+	isComplete: boolean
+	/** Флаг наличия фокуса на любом из полей. */
+	isFocused: boolean
+	/** Текущее значение PIN-кода. */
+	value: TPinInputValues
 }
 
 /**
- * Создаёт массив пустых строк заданной длины.
- */
-const createEmptyValues = (length: number): PinInputValues => Array.from({ length }, () => "")
-
-/**
- * Приводит массив значений к указанной длине.
+ * Нормализует длину PIN-кода.
  *
- * Существующие значения сохраняются, недостающие заполняются пустыми строками.
+ * @param length - Исходная длина.
+ * @returns Нормализованная длина (минимум 1).
  */
-const resizeValues = (values: PinInputValues, length: number): PinInputValues =>
-	Array.from({ length }, (_, index) => values[index] ?? "")
+const normalizeLength = (length: number): number => {
+	if (Number.isFinite(length)) {
+		return Math.max(1, Math.floor(length))
+	}
+
+	return 1
+}
 
 /**
- * Ограничивает индекс допустимым диапазоном.
+ * Создаёт массив пустых значений для полей PIN-кода.
+ *
+ * @param length - Количество полей.
+ * @returns Массив пустых строк.
+ */
+const createEmptyValues = (length: number): TPinInputValues => {
+	return Array.from({ length }, () => "")
+}
+
+/**
+ * Нормализует введённые символы в соответствии с типом PIN-кода.
+ *
+ * @param rawValue - Исходное значение.
+ * @param type - Тип PIN-кода (numeric или alphanumeric).
+ * @returns Отфильтрованные и нормализованные символы.
+ */
+const normalizeCharacters = (rawValue: string, type: TPinInputType): string => {
+	const pattern = type === "numeric" ? /\d/u : /[a-z\d]/iu
+	const normalizedValue = Array.from(rawValue)
+		.filter((character) => pattern.test(character))
+		.join("")
+
+	if (type === "alphanumeric") {
+		return normalizedValue.toUpperCase()
+	}
+
+	return normalizedValue
+}
+
+/**
+ * Нормализует массив значений в соответствии с длиной и типом PIN-кода.
+ *
+ * @param values - Исходный массив значений.
+ * @param length - Требуемая длина.
+ * @param type - Тип PIN-кода.
+ * @returns Нормализованный массив значений.
+ */
+const normalizeValues = (values: readonly string[], length: number, type: TPinInputType): TPinInputValues => {
+	return Array.from({ length }, (_, index) => normalizeCharacters(values[index] ?? "", type).slice(-1))
+}
+
+/**
+ * Ограничивает индекс в диапазоне [0, length - 1].
+ *
+ * @param index - Исходный индекс.
+ * @param length - Длина массива.
+ * @returns Ограниченный индекс.
  */
 const clampIndex = (index: number, length: number): number => {
-	if (length <= 0) return 0
-
-	return Math.min(Math.max(index, 0), length - 1)
+	return Math.min(Math.max(Math.floor(index), 0), Math.max(length - 1, 0))
 }
 
 /**
- * Хук для создания PIN/OTP-ввода с фокусом, маской,
- * валидацией и колбэком при завершении ввода.
+ * Хук для управления PIN-кодом (OTP-вводом).
+ *
+ * Предоставляет массив полей ввода с автоматической навигацией,
+ * поддержкой вставки, маскирования, автозаполнения OTP-кодов
+ * и колбэком при завершении ввода.
+ *
+ * @param options - Опции PIN-ввода.
+ * @returns Объект с полями ввода и методами управления.
  */
 export const usePinInput = ({
-	values: valuesProp,
-	length = 6,
-	onChange: onChangeProp,
-	onComplete,
-	completeDelay = 0,
-	actionRef,
 	autoFocus = false,
-	defaultValues,
-	type = "numeric",
+	completeDelay = 0,
+	defaultValue = [],
+	disabled = false,
+	focusOnInvalid = false,
+	invalid = false,
+	length = 6,
+	mask = false,
+	onComplete,
+	onValueChange,
 	otp = false,
 	placeholder = "○",
-	disabled = false,
-	mask = false,
-	error = false,
-	focusFirstEmptyOnError = error,
-}: UsePinInputProps = {}) => {
-	const isControlled = valuesProp !== undefined
-
-	const [valuesState, setValuesState] = useState<PinInputValues>(() => resizeValues(defaultValues ?? [], length))
-
+	type = "numeric",
+	value: controlledValue,
+}: IUsePinInputOptions = {}): IUsePinInputReturn => {
+	/** Безопасная длина PIN-кода. */
+	const safeLength = normalizeLength(length)
+	/** Безопасная задержка completeDelay. */
+	const safeCompleteDelay = Number.isFinite(completeDelay) ? Math.max(0, completeDelay) : 0
+	/** Флаг контролируемого режима. */
+	const controlled = controlledValue !== undefined
+	/** Внутреннее состояние значений. */
+	const [internalValue, setInternalValue] = useState<TPinInputValues>(() =>
+		normalizeValues(defaultValue, safeLength, type),
+	)
+	/** Индекс поля в фокусе. */
 	const [focusedIndex, setFocusedIndex] = useState(-1)
-
-	/*
-	 * Не обновляем state при изменении length.
-	 * Нужная длина вычисляется для текущего рендера.
-	 */
-	const values = resizeValues(isControlled ? valuesProp : valuesState, length)
-
-	const isTypeAlphanumeric = type === "alphanumeric"
-
-	const fieldRef = useRef<Array<HTMLInputElement | null>>(createEmptyValues(values.length).map(() => null))
-
-	const lastCompleteValueRef = useRef("")
+	/** Ref для хранения ссылок на DOM-элементы полей ввода. */
+	const inputsRef = useRef<Array<HTMLInputElement | null>>([])
+	/** Ref для хранения актуального колбэка onComplete. */
+	const onCompleteRef = useRef(onComplete)
+	/** Ref для хранения актуального колбэка onValueChange. */
+	const onValueChangeRef = useRef(onValueChange)
+	/** Ref для хранения последнего завершённого значения. */
+	const lastCompletedValueRef = useRef("")
+	/** Текущие значения полей, нормализованные. */
+	const values = normalizeValues(controlled ? controlledValue : internalValue, safeLength, type)
+	/** Полная строка PIN-кода. */
+	const completeValue = values.join("")
+	/** Флаг полного заполнения всех полей. */
+	const isComplete = values.every(Boolean)
 
 	useEffect(() => {
-		fieldRef.current = fieldRef.current.slice(0, values.length)
+		onCompleteRef.current = onComplete
+	}, [onComplete])
 
-		while (fieldRef.current.length < values.length) {
-			fieldRef.current.push(null)
-		}
-	}, [values.length])
+	useEffect(() => {
+		onValueChangeRef.current = onValueChange
+	}, [onValueChange])
 
-	/**
-	 * Устанавливает фокус на поле с указанным индексом.
-	 */
-	const setFocus = useCallback((index = 0): void => {
-		if (fieldRef.current.length === 0) return
+	/** Массив ref callback-ов для каждого поля ввода. */
+	const fieldRefs = useMemo(
+		() =>
+			Array.from({ length: safeLength }, (_, index): RefCallback<HTMLInputElement> => {
+				return (node) => {
+					inputsRef.current[index] = node
+				}
+			}),
+		[safeLength],
+	)
 
-		const nextIndex = clampIndex(index, fieldRef.current.length)
+	/** Устанавливает фокус на указанное поле. */
+	const focus = useCallback(
+		(index?: number): void => {
+			if (disabled) {
+				return
+			}
 
-		fieldRef.current[nextIndex]?.focus()
+			const firstEmptyIndex = values.findIndex((value) => value === "")
+			const requestedIndex = index ?? (firstEmptyIndex === -1 ? safeLength - 1 : firstEmptyIndex)
+			const inputElement = inputsRef.current[clampIndex(requestedIndex, safeLength)]
+
+			if (inputElement) {
+				inputElement.focus()
+			}
+		},
+		[disabled, safeLength, values],
+	)
+
+	/** Убирает фокус со всех полей. */
+	const blur = useCallback((): void => {
+		inputsRef.current.forEach((input) => {
+			if (input) {
+				input.blur()
+			}
+		})
 	}, [])
 
-	/**
-	 * Убирает фокус с активного поля.
-	 */
-	const setBlur = useCallback((): void => {
-		if (focusedIndex === -1) return
+	/** Применяет новые значения к полям. */
+	const commit = useCallback(
+		(nextValues: readonly string[]): void => {
+			const normalizedValues = normalizeValues(nextValues, safeLength, type)
 
-		fieldRef.current[focusedIndex]?.blur()
-	}, [focusedIndex])
+			if (!controlled) {
+				setInternalValue(normalizedValues)
+			}
+
+			if (onValueChangeRef.current) {
+				onValueChangeRef.current(normalizedValues)
+			}
+		},
+		[controlled, safeLength, type],
+	)
+
+	/** Очищает все поля PIN-кода. */
+	const clear = useCallback(
+		({ focus: shouldFocus = false }: IPinInputClearOptions = {}): void => {
+			commit(createEmptyValues(safeLength))
+			lastCompletedValueRef.current = ""
+
+			if (shouldFocus) {
+				const firstInput = inputsRef.current[0]
+
+				if (firstInput) {
+					firstInput.focus()
+				}
+			} else {
+				blur()
+			}
+		},
+		[blur, commit, safeLength],
+	)
 
 	useEffect(() => {
-		if (autoFocus) {
-			setFocus()
+		if (autoFocus && !disabled) {
+			const firstInput = inputsRef.current[0]
+
+			if (firstInput) {
+				firstInput.focus()
+			}
 		}
-	}, [autoFocus, setFocus])
+	}, [autoFocus, disabled])
 
-	useImperativeHandle(
-		actionRef,
-		() => ({
-			focus: (index = 0) => {
-				const emptyIndex = values.findIndex((value) => !value)
+	useEffect(() => {
+		if (invalid && focusOnInvalid && !disabled) {
+			const firstEmptyIndex = values.findIndex((value) => value === "")
+			const targetIndex = firstEmptyIndex === -1 ? 0 : firstEmptyIndex
+			const inputElement = inputsRef.current[targetIndex]
 
-				const nextIndex = focusFirstEmptyOnError && emptyIndex !== -1 ? emptyIndex : index
+			if (inputElement) {
+				inputElement.focus()
+			}
+		}
+	}, [disabled, focusOnInvalid, invalid, values])
 
-				setFocus(nextIndex)
-			},
-			blur: setBlur,
-		}),
-		[focusFirstEmptyOnError, setBlur, setFocus, values],
-	)
+	useEffect(() => {
+		if (!isComplete) {
+			lastCompletedValueRef.current = ""
 
-	/**
-	 * Создаёт callback-ref для поля.
-	 */
-	const setFieldRef = useCallback(
-		(index: number) =>
-			(node: HTMLInputElement | null): void => {
-				fieldRef.current[index] = node
-			},
-		[],
-	)
+			return undefined
+		}
 
-	/**
-	 * Обновляет значения полей.
-	 */
-	const updateValues = useCallback(
-		(nextValues: PinInputValues): void => {
-			if (!isControlled) {
-				setValuesState(nextValues)
+		if (completeValue === lastCompletedValueRef.current) {
+			return undefined
+		}
+
+		/** Уведомляет о завершении ввода PIN-кода. */
+		const notifyComplete = (): void => {
+			lastCompletedValueRef.current = completeValue
+
+			if (onCompleteRef.current) {
+				onCompleteRef.current(completeValue)
+			}
+		}
+
+		if (safeCompleteDelay === 0) {
+			notifyComplete()
+
+			return undefined
+		}
+
+		const timeoutId = setTimeout(notifyComplete, safeCompleteDelay)
+
+		return () => {
+			clearTimeout(timeoutId)
+		}
+	}, [completeValue, isComplete, safeCompleteDelay])
+
+	/** Формирует массив свойств для полей ввода. */
+	const fields = values.map((fieldValue, index): IPinInputFieldProps => {
+		/** Обработчик изменения значения поля. */
+		const handleChange: ChangeEventHandler<HTMLInputElement> = (event) => {
+			const incomingValue = normalizeCharacters(event.currentTarget.value, type)
+			const nextValues = [...values]
+
+			if (incomingValue.length === 0) {
+				nextValues[index] = ""
+				commit(nextValues)
+
+				return
 			}
 
-			onChangeProp?.(nextValues)
-		},
-		[isControlled, onChangeProp],
-	)
+			const characters = incomingValue.slice(0, safeLength - index).split("")
+			characters.forEach((character, characterIndex) => {
+				nextValues[index + characterIndex] = character
+			})
+			commit(nextValues)
 
-	/**
-	 * Нормализует введённое значение.
-	 */
-	const normalizeValue = useCallback(
-		(rawValue: string): null | string => {
-			let value = rawValue.trim()
+			const nextIndex = Math.min(index + characters.length, safeLength - 1)
+			const nextInput = inputsRef.current[nextIndex]
 
-			const regex = isTypeAlphanumeric ? /^[a-z\d]*$/iu : /^\d*$/u
+			if (nextInput) {
+				nextInput.focus()
+			}
+		}
 
-			if (!regex.test(value)) return null
+		/** Обработчик вставки из буфера обмена. */
+		const handlePaste: ClipboardEventHandler<HTMLInputElement> = (event) => {
+			const pastedValue = normalizeCharacters(event.clipboardData.getData("text"), type)
 
-			if (isTypeAlphanumeric) {
-				value = value.toUpperCase()
+			if (!pastedValue) {
+				return
 			}
 
-			return value
-		},
-		[isTypeAlphanumeric],
-	)
+			event.preventDefault()
+			const nextValues = [...values]
+			const characters = pastedValue.slice(0, safeLength - index).split("")
 
-	/**
-	 * Нормализует вставленное значение.
-	 */
-	const normalizePastedValue = useCallback(
-		(rawValue: string): null | string => {
-			const value = rawValue.replace(/[\s-]/gu, "")
+			characters.forEach((character, characterIndex) => {
+				nextValues[index + characterIndex] = character
+			})
+			commit(nextValues)
 
-			return normalizeValue(value)
-		},
-		[normalizeValue],
-	)
+			const firstEmptyIndex = nextValues.findIndex((value) => value === "")
+			const targetIndex = firstEmptyIndex === -1 ? safeLength - 1 : firstEmptyIndex
+			const targetInput = inputsRef.current[targetIndex]
 
-	/**
-	 * Перемещает фокус на следующее поле.
-	 */
-	const focusNextField = useCallback(
-		(index: number, nextValues: PinInputValues): void => {
-			if (index >= nextValues.length - 1) return
+			if (targetInput) {
+				targetInput.focus()
+			}
+		}
 
-			if (focusFirstEmptyOnError) {
-				const emptyIndex = nextValues.findIndex((value) => !value)
+		/** Обработчик нажатия клавиш. */
+		const handleKeyDown: KeyboardEventHandler<HTMLInputElement> = (event) => {
+			if (event.key === "ArrowLeft") {
+				event.preventDefault()
+				const leftInput = inputsRef.current[clampIndex(index - 1, safeLength)]
 
-				if (emptyIndex !== -1) {
-					setFocus(emptyIndex)
+				if (leftInput) {
+					leftInput.focus()
 				}
 
 				return
 			}
 
-			setFocus(index + 1)
-		},
-		[focusFirstEmptyOnError, setFocus],
-	)
-
-	/**
-	 * Создаёт обработчик ввода.
-	 */
-	const onInput = useCallback(
-		(index: number): PinInputHandler =>
-			(event) => {
-				let value = normalizeValue(event.currentTarget.value)
-
-				if (value === null) return
-
-				if (value.length === values.length) {
-					updateValues(value.split(""))
-					return
-				}
-
-				if (value.length === 2) {
-					const currentValue = values[index]
-
-					if (!value.includes(currentValue)) {
-						return
-					}
-
-					value = value.replace(currentValue, "")
-				}
-
-				if (value.length > 1) return
-
-				const nextValues = [...values]
-
-				nextValues[index] = value
-				updateValues(nextValues)
-
-				if (value) {
-					focusNextField(index, nextValues)
-				}
-			},
-		[focusNextField, normalizeValue, updateValues, values],
-	)
-
-	/**
-	 * Создаёт обработчик вставки.
-	 */
-	const onPaste = useCallback(
-		(index: number): PinInputPasteHandler =>
-			(event) => {
-				const pastedValue = normalizePastedValue(event.clipboardData.getData("text"))
-
-				if (!pastedValue) return
-
+			if (event.key === "ArrowRight") {
 				event.preventDefault()
+				const rightInput = inputsRef.current[clampIndex(index + 1, safeLength)]
 
+				if (rightInput) {
+					rightInput.focus()
+				}
+
+				return
+			}
+
+			if (event.key === "Home") {
+				event.preventDefault()
+				const firstInput = inputsRef.current[0]
+
+				if (firstInput) {
+					firstInput.focus()
+				}
+
+				return
+			}
+
+			if (event.key === "End") {
+				event.preventDefault()
+				const lastInput = inputsRef.current[safeLength - 1]
+
+				if (lastInput) {
+					lastInput.focus()
+				}
+
+				return
+			}
+
+			if (event.key === "Delete") {
+				event.preventDefault()
 				const nextValues = [...values]
+				nextValues[index] = ""
+				commit(nextValues)
 
-				const chars = pastedValue.slice(0, values.length - index).split("")
-
-				chars.forEach((char, charIndex) => {
-					nextValues[index + charIndex] = char
-				})
-
-				updateValues(nextValues)
-
-				const emptyIndex = nextValues.findIndex((value) => !value)
-
-				if (emptyIndex !== -1) {
-					setFocus(emptyIndex)
-					return
-				}
-
-				setFocus(index + chars.length - 1)
-			},
-		[normalizePastedValue, setFocus, updateValues, values],
-	)
-
-	/**
-	 * Создаёт обработчик нажатия клавиш.
-	 */
-	const onKeyDown = useCallback(
-		(index: number): PinInputKeyboardHandler =>
-			(event) => {
-				if (event.key === "Backspace" && !values[index] && index > 0) {
-					setFocus(index - 1)
-				}
-			},
-		[setFocus, values],
-	)
-
-	/**
-	 * Очищает все поля.
-	 */
-	const clear = useCallback(
-		({ focus = false }: PinInputClearOptions = {}): void => {
-			updateValues(createEmptyValues(values.length))
-
-			lastCompleteValueRef.current = ""
-
-			if (focus) {
-				setFocus()
-			} else {
-				setBlur()
+				return
 			}
-		},
-		[setBlur, setFocus, updateValues, values.length],
-	)
 
-	/**
-	 * Создаёт обработчик фокуса.
-	 */
-	const onFocus = useCallback(
-		(index: number): PinInputFocusHandler =>
-			() => {
-				setFocusedIndex(index)
-			},
-		[],
-	)
+			if (event.key === "Backspace") {
+				event.preventDefault()
+				const nextValues = [...values]
+				const targetIndex = nextValues[index] ? index : clampIndex(index - 1, safeLength)
 
-	/**
-	 * Обрабатывает потерю фокуса.
-	 */
-	const onBlur = useCallback<PinInputBlurHandler>(() => {
-		setFocusedIndex(-1)
-	}, [])
+				nextValues[targetIndex] = ""
+				commit(nextValues)
 
-	const hasFocus = focusedIndex !== -1
+				const backspaceTarget = inputsRef.current[targetIndex]
 
-	useEffect(() => {
-		let timeoutId: ReturnType<typeof setTimeout> | undefined
-
-		const isFilled = values.every((value) => value !== "")
-
-		const currentValue = values.join("")
-
-		if (!isFilled) {
-			lastCompleteValueRef.current = ""
-		} else if (currentValue !== lastCompleteValueRef.current) {
-			lastCompleteValueRef.current = currentValue
-
-			if (completeDelay <= 0) {
-				onComplete?.(currentValue)
-			} else {
-				timeoutId = setTimeout(() => {
-					onComplete?.(currentValue)
-				}, completeDelay)
+				if (backspaceTarget) {
+					backspaceTarget.focus()
+				}
 			}
 		}
 
-		return () => {
-			if (timeoutId !== undefined) {
-				clearTimeout(timeoutId)
-			}
+		return {
+			autoComplete: otp && index === 0 ? "one-time-code" : "off",
+			disabled,
+			inputMode: type === "numeric" ? "numeric" : "text",
+			maxLength: otp && index === 0 ? safeLength : 1,
+			onBlur: disabled ? undefined : () => setFocusedIndex(-1),
+			onChange: disabled ? undefined : handleChange,
+			onFocus: disabled
+				? undefined
+				: (event) => {
+						setFocusedIndex(index)
+						event.currentTarget.select()
+					},
+			onKeyDown: disabled ? undefined : handleKeyDown,
+			onPaste: disabled ? undefined : handlePaste,
+			placeholder: focusedIndex === -1 ? placeholder : "",
+			ref: fieldRefs[index],
+			type: mask ? "password" : "text",
+			value: fieldValue,
 		}
-	}, [completeDelay, onComplete, values])
-
-	const fields: PinInputFieldProps[] = values.map((value, index) => ({
-		ref: setFieldRef(index),
-		value,
-		disabled,
-		autoComplete: otp ? "one-time-code" : "off",
-		inputMode: isTypeAlphanumeric ? "text" : "numeric",
-		type: mask ? "password" : "text",
-		placeholder: hasFocus ? "" : placeholder,
-		...(!disabled && {
-			onFocus: onFocus(index),
-			onBlur,
-			onInput: onInput(index),
-			onKeyDown: onKeyDown(index),
-			onPaste: onPaste(index),
-		}),
-	}))
+	})
 
 	return {
-		fields,
+		blur,
 		clear,
-		isFocused: hasFocus,
+		fields,
+		focus,
+		focusedIndex,
+		isComplete,
+		isFocused: focusedIndex !== -1,
+		value: values,
 	}
 }
-
-/**
- * Возвращаемый результат `usePinInput`.
- */
-export type UsePinInputReturn = ReturnType<typeof usePinInput>

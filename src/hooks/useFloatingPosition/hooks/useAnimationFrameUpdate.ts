@@ -2,7 +2,10 @@ import { useCallback, useEffect, useRef } from "react"
 
 import { useIsomorphicLayoutEffect } from "./useIsomorphicLayoutEffect"
 
-interface UseAnimationFrameUpdateReturn {
+/**
+ * Возвращаемое значение хука useAnimationFrameUpdate.
+ */
+interface IUseAnimationFrameUpdateReturn {
 	/** Отменяет запланированное обновление. */
 	cancelUpdate: VoidFunction
 	/** Планирует обновление на ближайший animation frame. */
@@ -15,14 +18,17 @@ interface UseAnimationFrameUpdateReturn {
  * @param callback - Функция, которую нужно вызвать на animation frame.
  * @returns Методы планирования и отмены обновления.
  */
-export const useAnimationFrameUpdate = (callback: VoidFunction): UseAnimationFrameUpdateReturn => {
+export const useAnimationFrameUpdate = (callback: VoidFunction): IUseAnimationFrameUpdateReturn => {
+	/** Ref для хранения актуального колбэка. */
 	const callbackRef = useRef(callback)
+	/** Ref для хранения идентификатора animation frame. */
 	const frameIdRef = useRef<null | number>(null)
 
 	useIsomorphicLayoutEffect(() => {
 		callbackRef.current = callback
 	}, [callback])
 
+	/** Отменяет запланированное обновление. */
 	const cancelUpdate = useCallback(() => {
 		if (frameIdRef.current === null) {
 			return
@@ -32,6 +38,7 @@ export const useAnimationFrameUpdate = (callback: VoidFunction): UseAnimationFra
 		frameIdRef.current = null
 	}, [])
 
+	/** Планирует обновление на ближайший animation frame. */
 	const scheduleUpdate = useCallback(() => {
 		if (typeof window === "undefined") {
 			return
@@ -47,7 +54,9 @@ export const useAnimationFrameUpdate = (callback: VoidFunction): UseAnimationFra
 		})
 	}, [])
 
-	useEffect(() => cancelUpdate, [cancelUpdate])
+	useEffect(() => {
+		return cancelUpdate
+	}, [cancelUpdate])
 
 	return {
 		cancelUpdate,

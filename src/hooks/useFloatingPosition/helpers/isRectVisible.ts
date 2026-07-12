@@ -1,4 +1,4 @@
-import type { FloatingViewportRect } from "../useFloatingPosition.types"
+import type { IFloatingViewportRect } from "../useFloatingPosition.types"
 
 /**
  * Проверяет, пересекается ли прямоугольник с viewport.
@@ -7,7 +7,7 @@ import type { FloatingViewportRect } from "../useFloatingPosition.types"
  * @param viewportRect - Прямоугольник viewport.
  * @returns `true`, если прямоугольник виден хотя бы частично.
  */
-export const isRectVisible = (rect: DOMRect, viewportRect: FloatingViewportRect): boolean => {
+export const isRectVisible = (rect: DOMRect, viewportRect: IFloatingViewportRect): boolean => {
 	if (rect.width <= 0 || rect.height <= 0) {
 		return false
 	}

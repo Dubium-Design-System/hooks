@@ -1,11 +1,11 @@
-import type { FloatingViewportRect } from "../useFloatingPosition.types"
+import type { IFloatingViewportRect } from "../useFloatingPosition.types"
 
 /**
  * Возвращает прямоугольник видимой части viewport.
  *
  * @returns Размеры и границы viewport.
  */
-export const getViewportRect = (): FloatingViewportRect => {
+export const getViewportRect = (): IFloatingViewportRect => {
 	const { visualViewport } = window
 
 	if (visualViewport) {

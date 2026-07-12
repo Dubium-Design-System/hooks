@@ -1,8 +1,11 @@
-import type { FloatingCoords, FloatingViewportRect } from "../useFloatingPosition.types"
+import type { IFloatingCoords, IFloatingViewportRect } from "../useFloatingPosition.types"
 
-interface GetShiftedFloatingCoordsParams {
+/**
+ * Параметры для сдвига floating-элемента в границы viewport.
+ */
+interface IGetShiftedFloatingCoordsParams {
 	/** Исходные координаты floating-элемента. */
-	coords: FloatingCoords
+	coords: IFloatingCoords
 	/** Прямоугольник floating-элемента. */
 	floatingRect: DOMRect
 	/** Минимальный отступ от границ viewport. */
@@ -10,7 +13,7 @@ interface GetShiftedFloatingCoordsParams {
 	/** Флаг сдвига floating-элемента внутрь viewport. */
 	shift: boolean
 	/** Прямоугольник viewport. */
-	viewportRect: FloatingViewportRect
+	viewportRect: IFloatingViewportRect
 }
 
 /**
@@ -45,7 +48,7 @@ export const getShiftedFloatingCoords = ({
 	padding,
 	shift,
 	viewportRect,
-}: GetShiftedFloatingCoordsParams): FloatingCoords => {
+}: IGetShiftedFloatingCoordsParams): IFloatingCoords => {
 	if (!shift) {
 		return coords
 	}

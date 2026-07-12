@@ -1,5 +1,5 @@
 /**
- * HTML-атрибут для идентификации элементов safe-zone.
+ * HTML-атрибут для идентификации внутреннего SVG safe-zone.
  */
 export const HOVER_SAFE_ZONE_DATA_ATTRIBUTE = "data-hover-safe-zone"
 
@@ -17,8 +17,3 @@ export const HOVER_SAFE_ZONE_DEFAULT_PADDING = 16
  * Типы указателей по умолчанию, для которых работает safe-zone.
  */
 export const HOVER_SAFE_ZONE_DEFAULT_POINTER_TYPES = ["mouse"] as const
-
-/**
- * Z-index для оверлея safe-zone.
- */
-export const HOVER_SAFE_ZONE_Z_INDEX = 9999

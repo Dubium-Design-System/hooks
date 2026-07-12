@@ -1,14 +1,17 @@
-import type { FloatingCoords, FloatingPlacement } from "../useFloatingPosition.types"
+import type { IFloatingCoords, TFloatingPlacement } from "../useFloatingPosition.types"
 
 import { parseFloatingPlacement } from "./parseFloatingPlacement"
 
-interface GetBaseFloatingCoordsParams {
+/**
+ * Параметры для расчёта базовых координат floating-элемента.
+ */
+interface IGetBaseFloatingCoordsParams {
 	/** Прямоугольник floating-элемента. */
 	floatingRect: DOMRect
 	/** Отступ между reference и floating-элементом. */
 	offset: number
 	/** Итоговое расположение floating-элемента. */
-	placement: FloatingPlacement
+	placement: TFloatingPlacement
 	/** Прямоугольник reference-элемента. */
 	referenceRect: DOMRect
 }
@@ -24,7 +27,7 @@ export const getBaseFloatingCoords = ({
 	offset,
 	placement,
 	referenceRect,
-}: GetBaseFloatingCoordsParams): FloatingCoords => {
+}: IGetBaseFloatingCoordsParams): IFloatingCoords => {
 	const { alignment, side } = parseFloatingPlacement(placement)
 
 	let x = 0

@@ -1,11 +1,11 @@
 import { type CSSProperties, type RefCallback, useCallback, useMemo, useRef, useState } from "react"
 
 import type {
-	FloatingPlacement,
-	FloatingPositionResult,
-	FloatingResolvedOptions,
-	UseFloatingPositionOptions,
-	UseFloatingPositionReturn,
+	IFloatingPositionResult,
+	IFloatingResolvedOptions,
+	IUseFloatingPositionOptions,
+	IUseFloatingPositionReturn,
+	TFloatingPlacement,
 } from "./useFloatingPosition.types"
 
 import { computeFloatingPosition } from "./compute/computeFloatingPosition"
@@ -22,15 +22,14 @@ import {
 	DEFAULT_FLOATING_PLACEMENT,
 	DEFAULT_FLOATING_SAME_WIDTH,
 	DEFAULT_FLOATING_SHIFT,
-	DEFAULT_FLOATING_STRATEGY,
 	DEFAULT_FLOATING_STYLE,
 } from "./useFloatingPosition.constants"
 
 /**
  * Сравнивает два CSSProperties на идентичность.
  *
- * @param currentStyle Текущий стиль.
- * @param nextStyle Новый стиль.
+ * @param currentStyle - Текущий стиль.
+ * @param nextStyle - Новый стиль.
  * @returns `true`, если стили идентичны.
  */
 const isSameStyle = (currentStyle: CSSProperties, nextStyle: CSSProperties): boolean => {
@@ -47,13 +46,13 @@ const isSameStyle = (currentStyle: CSSProperties, nextStyle: CSSProperties): boo
  * Используется, чтобы не обновлять состояние,
  * если результат позиционирования не изменился.
  *
- * @param currentResult Текущий результат.
- * @param nextResult Новый результат.
+ * @param currentResult - Текущий результат.
+ * @param nextResult - Новый результат.
  * @returns `true`, если результаты идентичны.
  */
 const isSamePositionResult = (
-	currentResult: FloatingPositionResult | null,
-	nextResult: FloatingPositionResult,
+	currentResult: IFloatingPositionResult | null,
+	nextResult: IFloatingPositionResult,
 ): boolean => {
 	if (!currentResult) {
 		return false
@@ -79,15 +78,15 @@ const isSamePositionResult = (
  * Не отвечает за состояние Select/Dropdown, keyboard navigation,
  * focus management, outside click и hover safe-zone.
  *
- * @param options Опции позиционирования floating-элемента.
+ * @param options - Опции позиционирования floating-элемента.
  * @returns Refs, стили, placement и методы обновления позиции.
  */
 export const useFloatingPosition = <
 	TReference extends HTMLElement = HTMLElement,
 	TFloating extends HTMLElement = HTMLElement,
 >(
-	options: UseFloatingPositionOptions = {},
-): UseFloatingPositionReturn<TReference, TFloating> => {
+	options: IUseFloatingPositionOptions = {},
+): IUseFloatingPositionReturn<TReference, TFloating> => {
 	const {
 		autoUpdate = DEFAULT_FLOATING_AUTO_UPDATE,
 		flip = DEFAULT_FLOATING_FLIP,
@@ -102,27 +101,35 @@ export const useFloatingPosition = <
 		placement: preferredPlacement = DEFAULT_FLOATING_PLACEMENT,
 		sameWidth = DEFAULT_FLOATING_SAME_WIDTH,
 		shift = DEFAULT_FLOATING_SHIFT,
-		strategy = DEFAULT_FLOATING_STRATEGY,
 		zIndex,
 	} = options
 
+	/** Состояние reference-элемента. */
 	const [referenceElement, setReferenceElement] = useState<null | TReference>(null)
 
+	/** Состояние floating-элемента. */
 	const [floatingElement, setFloatingElement] = useState<null | TFloating>(null)
 
+	/** Текущий inline-style floating-элемента. */
 	const [floatingStyle, setFloatingStyle] = useState<CSSProperties>(DEFAULT_FLOATING_STYLE)
 
-	const [placement, setPlacement] = useState<FloatingPlacement>(preferredPlacement)
+	/** Текущий placement после применения flip. */
+	const [placement, setPlacement] = useState<TFloatingPlacement>(preferredPlacement)
 
+	/** Флаг скрытия reference-элемента. */
 	const [isReferenceHidden, setIsReferenceHidden] = useState(false)
 
-	const latestResultRef = useRef<FloatingPositionResult | null>(null)
+	/** Ref для хранения последнего результата позиционирования. */
+	const latestResultRef = useRef<IFloatingPositionResult | null>(null)
 
+	/** Ref для отслеживания предыдущего состояния скрытия reference. */
 	const wasReferenceHiddenRef = useRef(false)
 
+	/** Флаг активности позиционирования. */
 	const positioningEnabled = isOpen && !isDisabled
 
-	const resolvedOptions = useMemo<FloatingResolvedOptions>(
+	/** Мемоизированные нормализованные опции. */
+	const resolvedOptions = useMemo<IFloatingResolvedOptions>(
 		() => ({
 			flip,
 			hideWhenReferenceHidden,
@@ -132,21 +139,9 @@ export const useFloatingPosition = <
 			placement: preferredPlacement,
 			sameWidth,
 			shift,
-			strategy,
 			zIndex,
 		}),
-		[
-			flip,
-			hideWhenReferenceHidden,
-			maxHeight,
-			offset,
-			padding,
-			preferredPlacement,
-			sameWidth,
-			shift,
-			strategy,
-			zIndex,
-		],
+		[flip, hideWhenReferenceHidden, maxHeight, offset, padding, preferredPlacement, sameWidth, shift, zIndex],
 	)
 
 	/**
@@ -156,6 +151,7 @@ export const useFloatingPosition = <
 		if (!positioningEnabled || !referenceElement || !floatingElement) {
 			latestResultRef.current = null
 			wasReferenceHiddenRef.current = false
+
 			return
 		}
 
@@ -178,24 +174,32 @@ export const useFloatingPosition = <
 		}
 
 		if (result.isReferenceHidden && !wasReferenceHiddenRef.current) {
-			onReferenceHidden?.()
+			if (onReferenceHidden) {
+				onReferenceHidden()
+			}
 		}
 
 		wasReferenceHiddenRef.current = result.isReferenceHidden
 
-		onPositionChange?.(result)
+		if (onPositionChange) {
+			onPositionChange(result)
+		}
 	}, [floatingElement, onPositionChange, onReferenceHidden, positioningEnabled, referenceElement, resolvedOptions])
 
+	/** Хук для планирования обновлений через requestAnimationFrame. */
 	const { cancelUpdate, scheduleUpdate } = useAnimationFrameUpdate(forceUpdate)
 
+	/** Ref callback для reference-элемента. */
 	const referenceRef: RefCallback<TReference> = useCallback((node) => {
 		setReferenceElement(node)
 	}, [])
 
+	/** Ref callback для floating-элемента. */
 	const floatingRef: RefCallback<TFloating> = useCallback((node) => {
 		setFloatingElement(node)
 	}, [])
 
+	/** Автоматическое обновление позиции при scroll/resize/изменении размеров. */
 	useAutoUpdate({
 		enabled: positioningEnabled && autoUpdate,
 		floatingElement,

@@ -1,4 +1,4 @@
-import type { HoverSafeZoneAreaProps } from "../useHoverSafeZoneArea.types"
+import type { IHoverSafeZoneAreaProps } from "../useHoverSafeZoneArea.types"
 
 import { useHoverSafeZoneArea } from "../hooks/useHoverSafeZoneArea"
 
@@ -6,7 +6,7 @@ import { useHoverSafeZoneArea } from "../hooks/useHoverSafeZoneArea"
  * Компонент для создания безопасной зоны при наведении.
  *
  * Использует render-prop паттерн для передачи ref-ов на target и container элементы.
- * Автоматически рендерит оверлей safe-zone при активации.
+ * Невидимый SVG hit-test создаётся и удаляется внутри хука автоматически.
  *
  * @example
  * ```tsx
@@ -23,17 +23,11 @@ import { useHoverSafeZoneArea } from "../hooks/useHoverSafeZoneArea"
  * </HoverSafeZoneArea>
  * ```
  */
-export const HoverSafeZoneArea = ({ children, ...options }: HoverSafeZoneAreaProps) => {
-	const safeZoneArea = useHoverSafeZoneArea(options)
+export const HoverSafeZoneArea = ({ children, ...options }: IHoverSafeZoneAreaProps) => {
+	const { targetRef, containerRef } = useHoverSafeZoneArea(options)
 
-	return (
-		<>
-			{children({
-				targetRef: safeZoneArea.targetRef,
-				containerRef: safeZoneArea.containerRef,
-			})}
-
-			{safeZoneArea.elementToRender}
-		</>
-	)
+	return children({
+		targetRef,
+		containerRef,
+	})
 }

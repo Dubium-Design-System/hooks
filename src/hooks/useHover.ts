@@ -1,45 +1,88 @@
-import { useEffect, useRef, useState } from "react"
+import { type RefCallback, useCallback, useEffect, useMemo, useState } from "react"
 
 /**
- * Хук для отслеживания состояния наведения (hover) на DOM-элемент.
- *
- * Возвращает ref, который нужно прикрепить к элементу, и булево значение,
- * указывающее, находится ли курсор мыши над элементом.
- *
- * @template T - Тип HTML-элемента (по умолчанию HTMLElement).
- * @returns Кортеж [ref, hovered], где ref — callback ref для элемента,
- *          а hovered — `true`, если курсор находится над элементом.
- *
- * @example
- * ```tsx
- * const [ref, isHovered] = useHover<HTMLDivElement>();
- *
- * return <div ref={ref}>{isHovered ? "Наведён" : "Не наведён"}</div>;
- * ```
+ * Тип указателя для отслеживания наведения.
  */
-export const useHover = <T extends HTMLElement = HTMLElement>() => {
-	const ref = useRef<null | T>(null)
-	const [hovered, setHovered] = useState(false)
+export type THoverPointerType = "mouse" | "pen" | "touch"
 
-	useEffect(() => {
-		const element = ref.current
+/**
+ * Опции хука `useHover`.
+ */
+export interface IUseHoverOptions {
+	/** Флаг отключения отслеживания наведения. */
+	disabled?: boolean
+	/** Типы указателей, для которых отслеживается наведение. */
+	pointerTypes?: readonly THoverPointerType[]
+}
 
-		const handleMouseEnter = (): void => {
-			setHovered(true)
-		}
+/**
+ * Возвращаемое значение хука `useHover`.
+ */
+export interface IUseHoverReturn<TElement extends HTMLElement> {
+	/** Флаг наведения указателя на элемент. */
+	isHovered: boolean
+	/** Ref callback для привязки к отслеживаемому элементу. */
+	ref: RefCallback<TElement>
+}
 
-		const handleMouseLeave = (): void => {
-			setHovered(false)
-		}
+/** Типы указателей по умолчанию: мышь и перо. */
+const DEFAULT_POINTER_TYPES: readonly THoverPointerType[] = ["mouse", "pen"]
 
-		element?.addEventListener("mouseenter", handleMouseEnter)
-		element?.addEventListener("mouseleave", handleMouseLeave)
+/**
+ * Отслеживает наведение указателя на элемент.
+ *
+ * Использует Pointer Events для определения наведения,
+ * поддерживает фильтрацию по типу указателя (мышь, перо, сенсор).
+ *
+ * @param options - Опции отслеживания наведения.
+ * @returns Объект с флагом `isHovered` и `ref` для привязки к элементу.
+ */
+export const useHover = <TElement extends HTMLElement = HTMLElement>({
+	disabled = false,
+	pointerTypes = DEFAULT_POINTER_TYPES,
+}: IUseHoverOptions = {}): IUseHoverReturn<TElement> => {
+	/** Состояние отслеживаемого элемента. */
+	const [element, setElement] = useState<null | TElement>(null)
+	/** Состояние элемента, на который наведён указатель. */
+	const [hoveredElement, setHoveredElement] = useState<null | TElement>(null)
+	/** Множество разрешённых типов указателей для быстрой проверки. */
+	const allowedPointerTypes = useMemo(() => new Set<string>(pointerTypes), [pointerTypes])
 
-		return () => {
-			element?.removeEventListener("mouseenter", handleMouseEnter)
-			element?.removeEventListener("mouseleave", handleMouseLeave)
-		}
+	/** Ref callback для привязки к элементу. */
+	const ref = useCallback<RefCallback<TElement>>((node) => {
+		setElement(node)
 	}, [])
 
-	return [ref, hovered] as const
+	useEffect(() => {
+		if (!element || disabled) {
+			return undefined
+		}
+
+		/** Обработчик входа указателя в элемент. */
+		const handlePointerEnter = (event: PointerEvent): void => {
+			if (allowedPointerTypes.has(event.pointerType)) {
+				setHoveredElement(element)
+			}
+		}
+
+		/** Обработчик выхода указателя из элемента. */
+		const handlePointerLeave = (event: PointerEvent): void => {
+			if (allowedPointerTypes.has(event.pointerType)) {
+				setHoveredElement(null)
+			}
+		}
+
+		element.addEventListener("pointerenter", handlePointerEnter)
+		element.addEventListener("pointerleave", handlePointerLeave)
+
+		return () => {
+			element.removeEventListener("pointerenter", handlePointerEnter)
+			element.removeEventListener("pointerleave", handlePointerLeave)
+		}
+	}, [allowedPointerTypes, disabled, element])
+
+	return {
+		isHovered: !disabled && hoveredElement === element,
+		ref,
+	}
 }

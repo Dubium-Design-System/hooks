@@ -1,12 +1,15 @@
-import type { FloatingAvailableSpace, FloatingViewportRect } from "../useFloatingPosition.types"
+import type { IFloatingAvailableSpace, IFloatingViewportRect } from "../useFloatingPosition.types"
 
-interface GetAvailableSpaceParams {
+/**
+ * Параметры для расчёта доступного пространства вокруг reference-элемента.
+ */
+interface IGetAvailableSpaceParams {
 	/** Минимальный отступ от границ viewport. */
 	padding: number
 	/** Прямоугольник reference-элемента. */
 	referenceRect: DOMRect
 	/** Прямоугольник viewport. */
-	viewportRect: FloatingViewportRect
+	viewportRect: IFloatingViewportRect
 }
 
 /**
@@ -19,7 +22,7 @@ export const getAvailableSpace = ({
 	padding,
 	referenceRect,
 	viewportRect,
-}: GetAvailableSpaceParams): FloatingAvailableSpace => ({
+}: IGetAvailableSpaceParams): IFloatingAvailableSpace => ({
 	bottom: Math.max(0, viewportRect.bottom - referenceRect.bottom - padding),
 	left: Math.max(0, referenceRect.left - viewportRect.left - padding),
 	right: Math.max(0, viewportRect.right - referenceRect.right - padding),

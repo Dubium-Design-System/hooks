@@ -9,15 +9,14 @@
 export { useFloatingPosition } from "./useFloatingPosition"
 
 export type {
-	FloatingAlignment,
-	FloatingAvailableSpace,
-	FloatingCoords,
-	FloatingParsedPlacement,
-	FloatingPlacement,
-	FloatingPositionResult,
-	FloatingSide,
-	FloatingStrategy,
-	FloatingViewportRect,
-	UseFloatingPositionOptions,
-	UseFloatingPositionReturn,
+	IFloatingAvailableSpace,
+	IFloatingCoords,
+	IFloatingParsedPlacement,
+	IFloatingPositionResult,
+	IFloatingViewportRect,
+	IUseFloatingPositionOptions,
+	IUseFloatingPositionReturn,
+	TFloatingAlignment,
+	TFloatingPlacement,
+	TFloatingSide,
 } from "./useFloatingPosition.types"

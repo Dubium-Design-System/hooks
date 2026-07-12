@@ -1,273 +1,262 @@
-import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { type RefCallback, useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 /**
- * Режим перемещения: по обеим осям, только по вертикали или только по горизонтали.
+ * Режим перемещения: по обеим осям, только по горизонтали или только по вертикали.
  */
-type MoveMode = "both" | "horizontal" | "vertical"
+export type TMoveMode = "both" | "horizontal" | "vertical"
 
 /**
- * Координаты позиции.
+ * Позиция с координатами x и y.
  */
-export interface Position {
+export interface IPosition {
 	x: number
 	y: number
 }
 
 /**
- * Параметры хука useMove.
+ * Опции хука `useMove`.
  */
-export interface UseMoveParams {
-	/** Начальное значение позиции (от 0 до 1). */
-	initialValue?: Partial<Position>
-	/** Режим перемещения. По умолчанию `"both"`. */
-	mode?: MoveMode
+export interface IUseMoveOptions {
+	/** Флаг отключения отслеживания перемещения. */
+	disabled?: boolean
+	/** Начальное значение позиции. */
+	initialValue?: Partial<IPosition>
+	/** Инвертировать ось X. */
+	invertX?: boolean
+	/** Инвертировать ось Y. */
+	invertY?: boolean
+	/** Режим перемещения. */
+	mode?: TMoveMode
+	/** Колбэк при изменении позиции. */
+	onChange?: (position: IPosition) => void
 }
 
 /**
- * Возвращаемое значение хука useMove.
+ * Возвращаемое значение хука `useMove`.
  */
-export interface UseMoveReturn extends Position {
+export interface IUseMoveReturn<TElement extends HTMLElement> extends IPosition {
 	/** Флаг активности перемещения (зажат указатель). */
 	active: boolean
-	/** Ref на DOM-элемент, в котором происходит перемещение. */
-	ref: RefObject<HTMLElement | null>
-	/** Сбросить позицию к начальному значению. */
-	reset: () => void
+	/** Ref callback для привязки к элементу. */
+	ref: RefCallback<TElement>
+	/** Сбрасывает позицию к начальному значению. */
+	reset: VoidFunction
+	/** Устанавливает произвольную позицию. */
+	setPosition: (position: ((currentPosition: IPosition) => IPosition) | IPosition) => void
 }
 
-/** Опции для pointermove: отключаем пассивный режим, чтобы можно было вызвать preventDefault. */
-const POINTER_MOVE_OPTIONS: AddEventListenerOptions = {
-	passive: false,
-}
+/** Опции Pointer Events: непассивные для возможности preventDefault. */
+const POINTER_OPTIONS: AddEventListenerOptions = { passive: false }
 
 /**
- * Ограничивает значение указанным диапазоном.
+ * Ограничивает значение диапазоном [0, 1].
  *
  * @param value - Исходное значение.
- * @param min - Минимальное значение.
- * @param max - Максимальное значение.
- * @returns Значение, ограниченное диапазоном [min, max].
+ * @returns Значение в диапазоне [0, 1].
  */
-const clamp = (value: number, min: number, max: number) => {
-	return Math.min(Math.max(value, min), max)
+const clamp = (value: number): number => {
+	return Math.min(Math.max(value, 0), 1)
 }
 
 /**
- * Нормализует позицию, приводя значения x и y к диапазону [0, 1].
+ * Нормализует позицию: приводит координаты к диапазону [0, 1].
  *
- * @param position - Частичная позиция (значения по умолчанию 0).
+ * @param position - Частичная позиция.
  * @returns Нормализованная позиция.
  */
-const normalizePosition = ({ x = 0, y = 0 }: Partial<Position> = {}): Position => {
-	return {
-		x: clamp(x, 0, 1),
-		y: clamp(y, 0, 1),
-	}
-}
+const normalizePosition = ({ x = 0, y = 0 }: Partial<IPosition> = {}): IPosition => ({
+	x: clamp(Number.isFinite(x) ? x : 0),
+	y: clamp(Number.isFinite(y) ? y : 0),
+})
 
 /**
- * Вычисляет следующую позицию с учётом режима перемещения.
+ * Хук для отслеживания перемещения указателя относительно элемента.
  *
- * @param previousPosition - Предыдущая позиция.
- * @param nextPosition - Следующая позиция (на основе события).
- * @param mode - Режим перемещения.
- * @returns Итоговая позиция.
+ * Возвращает нормализованные координаты (0–1) и флаг активности.
+ * Поддерживает инверсию осей, ограничение по осям и колбэк onChange.
+ *
+ * @param options - Опции отслеживания перемещения.
+ * @returns Объект с координатами, флагом активности и ref для привязки.
  */
-const getNextPosition = (previousPosition: Position, nextPosition: Position, mode: MoveMode): Position => {
-	if (mode === "horizontal") {
-		return {
-			x: nextPosition.x,
-			y: previousPosition.y,
-		}
-	}
-
-	if (mode === "vertical") {
-		return {
-			x: previousPosition.x,
-			y: 1 - nextPosition.y,
-		}
-	}
-
-	return nextPosition
-}
-
-/**
- * Хук для отслеживания перемещения указателя внутри элемента.
- *
- * Возвращает относительные координаты (от 0 до 1) и флаг активности.
- * Полезно для создания ползунков, цветовых пикеров и других
- * интерактивных элементов, где нужно отслеживать позицию курсора.
- *
- * @param params - Параметры хука.
- * @returns Объект с ref, координатами, флагом активности и методом сброса.
- *
- * @example
- * ```tsx
- * const { ref, x, y, active } = useMove({ mode: "both" });
- *
- * return <div ref={ref}>Позиция: {x.toFixed(2)}, {y.toFixed(2)}</div>;
- * ```
- */
-export const useMove = ({ mode = "both", initialValue }: UseMoveParams = {}): UseMoveReturn => {
-	const initialPosition = useMemo(() => {
-		return normalizePosition(initialValue)
-	}, [initialValue])
-
-	const [position, setPosition] = useState<Position>(() => {
-		return initialPosition
-	})
-
+export const useMove = <TElement extends HTMLElement = HTMLElement>({
+	disabled = false,
+	initialValue,
+	invertX = false,
+	invertY = false,
+	mode = "both",
+	onChange,
+}: IUseMoveOptions = {}): IUseMoveReturn<TElement> => {
+	const initialX = initialValue?.x
+	const initialY = initialValue?.y
+	/** Начальная позиция, вычисляемая один раз. */
+	const initialPosition = useMemo(() => normalizePosition({ x: initialX, y: initialY }), [initialX, initialY])
+	/** Состояние отслеживаемого элемента. */
+	const [element, setElement] = useState<null | TElement>(null)
+	/** Текущая позиция указателя. */
+	const [position, setPosition] = useState(initialPosition)
+	/** Флаг активности (зажат указатель). */
 	const [active, setActive] = useState(false)
-
-	const ref = useRef<HTMLElement | null>(null)
-	const isMovingRef = useRef(false)
+	/** Ref для хранения идентификатора указателя. */
 	const pointerIdRef = useRef<null | number>(null)
+	/** Ref для хранения актуального колбэка onChange. */
+	const onChangeRef = useRef(onChange)
 
-	/**
-	 * Обновляет позицию на основе события указателя.
-	 * Вычисляет относительные координаты (0..1) внутри элемента.
-	 * @param event - Событие указателя.
-	 */
-	const updatePositionFromEvent = useCallback(
-		(event: PointerEvent) => {
-			const element = ref.current
+	useEffect(() => {
+		onChangeRef.current = onChange
+	}, [onChange])
 
-			if (!element || !isMovingRef.current) {
-				return
-			}
+	/** Ref callback для привязки к элементу. */
+	const ref = useCallback<RefCallback<TElement>>((node) => {
+		setElement(node)
+	}, [])
 
-			if (pointerIdRef.current !== null && event.pointerId !== pointerIdRef.current) {
+	/** Устанавливает позицию с нормализацией и вызовом onChange. */
+	const setPositionValue = useCallback(
+		(nextPosition: ((currentPosition: IPosition) => IPosition) | IPosition): void => {
+			setPosition((currentPosition) => {
+				const resolvedPosition =
+					typeof nextPosition === "function" ? nextPosition(currentPosition) : nextPosition
+				const normalizedPosition = normalizePosition(resolvedPosition)
+
+				onChangeRef.current?.(normalizedPosition)
+
+				return normalizedPosition
+			})
+		},
+		[],
+	)
+
+	/** Сбрасывает позицию к начальному значению. */
+	const reset = useCallback((): void => {
+		setPositionValue(initialPosition)
+	}, [initialPosition, setPositionValue])
+
+	useEffect(() => {
+		if (!element || disabled) {
+			return undefined
+		}
+
+		/** Обновляет позицию из события PointerEvent. */
+		const updateFromPointer = (event: PointerEvent): void => {
+			if (pointerIdRef.current !== event.pointerId) {
 				return
 			}
 
 			const rect = element.getBoundingClientRect()
 
-			if (rect.width === 0 || rect.height === 0) {
+			if (rect.width <= 0 || rect.height <= 0) {
 				return
 			}
 
-			const nextPosition = normalizePosition({
-				x: (event.clientX - rect.left) / rect.width,
-				y: (event.clientY - rect.top) / rect.height,
-			})
+			let x = clamp((event.clientX - rect.left) / rect.width)
+			let y = clamp((event.clientY - rect.top) / rect.height)
 
-			setPosition((previousPosition) => {
-				return getNextPosition(previousPosition, nextPosition, mode)
-			})
-		},
-		[mode],
-	)
+			if (invertX) {
+				x = 1 - x
+			}
 
-	/**
-	 * Останавливает перемещение: сбрасывает флаги движения и активность.
-	 */
-	const stop = useCallback(() => {
-		isMovingRef.current = false
-		pointerIdRef.current = null
-		setActive(false)
-	}, [])
+			if (invertY) {
+				y = 1 - y
+			}
 
-	/**
-	 * Начинает перемещение: проверяет кнопку мыши, предотвращает стандартное поведение
-	 * и обновляет позицию.
-	 * @param event - Событие pointerdown.
-	 */
-	const start = useCallback(
-		(event: PointerEvent) => {
+			setPositionValue((currentPosition) => ({
+				x: mode === "vertical" ? currentPosition.x : x,
+				y: mode === "horizontal" ? currentPosition.y : y,
+			}))
+		}
+
+		/** Завершает отслеживание перемещения. */
+		const stop = (event?: PointerEvent): void => {
+			if (event && pointerIdRef.current !== null && event.pointerId !== pointerIdRef.current) {
+				return
+			}
+
+			const pointerId = pointerIdRef.current
+			pointerIdRef.current = null
+			setActive(false)
+
+			if (pointerId !== null && element.hasPointerCapture(pointerId)) {
+				element.releasePointerCapture(pointerId)
+			}
+		}
+
+		/** Обработчик нажатия указателя. */
+		const handlePointerDown = (event: PointerEvent): void => {
 			if (event.pointerType === "mouse" && event.button !== 0) {
 				return
 			}
 
-			event.preventDefault()
-
-			isMovingRef.current = true
-			pointerIdRef.current = event.pointerId
-			setActive(true)
-
-			updatePositionFromEvent(event)
-		},
-		[updatePositionFromEvent],
-	)
-
-	/**
-	 * Обрабатывает движение указателя: предотвращает стандартное поведение
-	 * и обновляет позицию.
-	 * @param event - Событие pointermove.
-	 */
-	const handlePointerMove = useCallback(
-		(event: PointerEvent) => {
 			if (event.cancelable) {
 				event.preventDefault()
 			}
 
-			updatePositionFromEvent(event)
-		},
-		[updatePositionFromEvent],
-	)
+			pointerIdRef.current = event.pointerId
+			element.setPointerCapture(event.pointerId)
+			setActive(true)
+			updateFromPointer(event)
+		}
 
-	/**
-	 * Обрабатывает завершение перемещения: проверяет идентификатор указателя
-	 * и останавливает перемещение.
-	 * @param event - Событие pointerup или pointercancel.
-	 */
-	const handlePointerEnd = useCallback(
-		(event: PointerEvent) => {
-			if (pointerIdRef.current !== null && event.pointerId !== pointerIdRef.current) {
+		/** Обработчик перемещения указателя. */
+		const handlePointerMove = (event: PointerEvent): void => {
+			if (pointerIdRef.current !== event.pointerId) {
 				return
 			}
 
+			if (event.cancelable) {
+				event.preventDefault()
+			}
+
+			updateFromPointer(event)
+		}
+
+		/** Обработчик отпускания указателя. */
+		const handlePointerEnd = (event: PointerEvent): void => {
+			stop(event)
+		}
+
+		/** Обработчик потери фокуса окном. */
+		const handleWindowBlur = (): void => {
 			stop()
-		},
-		[stop],
-	)
+		}
 
-	/**
-	 * Обрабатывает потерю фокуса окном: останавливает перемещение.
-	 */
-	const handleWindowBlur = useCallback(() => {
-		stop()
-	}, [stop])
+		element.addEventListener("pointerdown", handlePointerDown, POINTER_OPTIONS)
+		element.addEventListener("pointermove", handlePointerMove, POINTER_OPTIONS)
+		element.addEventListener("pointerup", handlePointerEnd)
+		element.addEventListener("pointercancel", handlePointerEnd)
+		element.addEventListener("lostpointercapture", handlePointerEnd)
 
-	/**
-	 * Сбрасывает позицию к начальному значению.
-	 */
-	const reset = useCallback(() => {
-		setPosition(initialPosition)
-	}, [initialPosition])
-
-	useEffect(() => {
-		const element = ref.current
-
-		if (element) {
-			element.addEventListener("pointerdown", start)
+		if (element.ownerDocument.defaultView) {
+			element.ownerDocument.defaultView.addEventListener("blur", handleWindowBlur)
 		}
 
 		return () => {
-			element?.removeEventListener("pointerdown", start)
-		}
-	}, [start])
+			element.removeEventListener("pointerdown", handlePointerDown, POINTER_OPTIONS)
+			element.removeEventListener("pointermove", handlePointerMove, POINTER_OPTIONS)
+			element.removeEventListener("pointerup", handlePointerEnd)
+			element.removeEventListener("pointercancel", handlePointerEnd)
+			element.removeEventListener("lostpointercapture", handlePointerEnd)
 
-	useEffect(() => {
-		if (active) {
-			document.addEventListener("pointermove", handlePointerMove, POINTER_MOVE_OPTIONS)
-			document.addEventListener("pointerup", handlePointerEnd)
-			document.addEventListener("pointercancel", handlePointerEnd)
-			window.addEventListener("blur", handleWindowBlur)
-		}
+			if (element.ownerDocument.defaultView) {
+				element.ownerDocument.defaultView.removeEventListener("blur", handleWindowBlur)
+			}
 
-		return () => {
-			document.removeEventListener("pointermove", handlePointerMove, POINTER_MOVE_OPTIONS)
-			document.removeEventListener("pointerup", handlePointerEnd)
-			document.removeEventListener("pointercancel", handlePointerEnd)
-			window.removeEventListener("blur", handleWindowBlur)
+			const pointerId = pointerIdRef.current
+			pointerIdRef.current = null
+
+			if (pointerId !== null && element.hasPointerCapture(pointerId)) {
+				element.releasePointerCapture(pointerId)
+			}
+
+			setActive(false)
 		}
-	}, [active, handlePointerMove, handlePointerEnd, handleWindowBlur])
+	}, [disabled, element, invertX, invertY, mode, setPositionValue])
 
 	return {
+		active: !disabled && active,
 		ref,
+		reset,
+		setPosition: setPositionValue,
 		x: position.x,
 		y: position.y,
-		active,
-		reset,
 	}
 }

@@ -1,38 +1,19 @@
-import { useEffect, useRef } from "react"
-
-type EffectFn = () => void | VoidFunction
+import { type EffectCallback, useEffect, useRef } from "react"
 
 /**
- * Хук, имитирующий поведение componentDidMount.
+ * Выполняет эффект только при монтировании компонента.
  *
- * Выполняет переданную функцию один раз при монтировании компонента.
- * Защищён от двойного вызова в dev-режиме с React.StrictMode за счёт использования useRef.
+ * Аналог `useEffect(fn, [])`, но с использованием ref для хранения
+ * колбэка, что позволяет избежать предупреждений линтера
+ * о пустом массиве зависимостей.
  *
- * Если функция возвращает другую функцию, она будет вызвана при размонтировании компонента (аналог componentWillUnmount).
- *
- * @example
- * useMountEffect(() => {
- *   const id = setInterval(() => {
- *     console.log('tick');
- *   }, 1000);
- *
- *   return () => clearInterval(id); // Очистка ресурса
- * });
- *
- * @param fn - Функция, вызываемая при монтировании. Может вернуть функцию очистки.
+ * @param effect - Эффект, который нужно выполнить при монтировании.
  */
-export const useMountEffect = (fn: EffectFn): void => {
-	const fnRef = useRef(fn)
+export const useMountEffect = (effect: EffectCallback): void => {
+	/** Ref для хранения актуального эффекта. */
+	const initialEffectRef = useRef(effect)
 
 	useEffect(() => {
-		fnRef.current = fn
-	}, [fn])
-
-	useEffect(() => {
-		const cleanup = fnRef.current()
-
-		return () => {
-			cleanup?.()
-		}
+		initialEffectRef.current()
 	}, [])
 }

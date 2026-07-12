@@ -1,37 +1,46 @@
 import { useEffect, useState } from "react"
 
 /**
- * Хук для отложенного обновления значения (debounce).
+ * Нормализует задержку: проверяет конечность и неотрицательность.
  *
- * @template T Тип debounce-значения.
- * @param value Исходное значение.
- * @param delay Задержка в миллисекундах.
- * @returns Отложенное значение.
- *
- * @example
- * ```tsx
- * const [search, setSearch] = useState("")
- * const debouncedSearch = useDebounce(search, 300)
- * ```
+ * @param delay - Исходная задержка.
+ * @returns Нормализованная задержка.
  */
-export const useDebounce = <T>(value: T, delay: number): T => {
-	const [debouncedValue, setDebouncedValue] = useState<T>(value)
+const normalizeDelay = (delay: number): number => {
+	if (Number.isFinite(delay)) {
+		return Math.max(0, delay)
+	}
+
+	return 0
+}
+
+/**
+ * Возвращает отложенное значение, которое обновляется после указанной задержки.
+ *
+ * Полезно для поиска при вводе, фильтрации и других сценариев,
+ * где нужно избежать частых обновлений.
+ *
+ * @param value - Значение, которое нужно отложить.
+ * @param delay - Задержка в миллисекундах.
+ * @returns Отложенное значение.
+ */
+export const useDebounce = <T>(value: T, delay = 0): T => {
+	const [debouncedValue, setDebouncedValue] = useState(value)
+	const safeDelay = normalizeDelay(delay)
 
 	useEffect(() => {
-		let timeoutId: ReturnType<typeof setTimeout> | undefined
-
-		if (delay > 0) {
-			timeoutId = setTimeout(() => {
-				setDebouncedValue(value)
-			}, delay)
-		}
+		const timeoutId = setTimeout(() => {
+			setDebouncedValue(value)
+		}, safeDelay)
 
 		return () => {
-			if (timeoutId !== undefined) {
-				clearTimeout(timeoutId)
-			}
+			clearTimeout(timeoutId)
 		}
-	}, [value, delay])
+	}, [safeDelay, value])
 
-	return delay <= 0 ? value : debouncedValue
+	if (safeDelay === 0) {
+		return value
+	}
+
+	return debouncedValue
 }

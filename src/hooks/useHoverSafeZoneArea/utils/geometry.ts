@@ -1,11 +1,11 @@
 import type {
-	HoverSafeZoneOrigin,
-	HoverSafeZoneOverlayState,
-	HoverSafeZonePlacementSide,
-	Point,
-	PointerCoordinates,
-	RectLike,
-	RectPoints,
+	IHoverSafeZoneOverlayState,
+	IPointerCoordinates,
+	IRectLike,
+	IRectPoints,
+	THoverSafeZoneOrigin,
+	THoverSafeZonePlacementSide,
+	TPoint,
 } from "../useHoverSafeZoneArea.types"
 
 /**
@@ -14,7 +14,9 @@ import type {
  * @param event - Событие указателя.
  * @returns Точка [clientX, clientY].
  */
-export const getPoint = (event: Pick<PointerEvent, "clientX" | "clientY">): Point => [event.clientX, event.clientY]
+export const getPoint = (event: Pick<PointerEvent, "clientX" | "clientY">): TPoint => {
+	return [event.clientX, event.clientY]
+}
 
 /**
  * Извлекает координаты указателя из события в формате PointerCoordinates.
@@ -22,7 +24,7 @@ export const getPoint = (event: Pick<PointerEvent, "clientX" | "clientY">): Poin
  * @param event - Событие указателя.
  * @returns Объект с clientX и clientY.
  */
-export const getPointerCoordinates = (event: Pick<PointerEvent, "clientX" | "clientY">): PointerCoordinates => ({
+export const getPointerCoordinates = (event: Pick<PointerEvent, "clientX" | "clientY">): IPointerCoordinates => ({
 	clientX: event.clientX,
 	clientY: event.clientY,
 })
@@ -34,11 +36,14 @@ export const getPointerCoordinates = (event: Pick<PointerEvent, "clientX" | "cli
  * @param point - Координаты точки.
  * @returns true, если точка внутри прямоугольника.
  */
-export const isPointInsideRect = (rect: DOMRect, point: PointerCoordinates): boolean =>
-	point.clientX >= rect.left &&
-	point.clientX <= rect.right &&
-	point.clientY >= rect.top &&
-	point.clientY <= rect.bottom
+export const isPointInsideRect = (rect: DOMRect, point: IPointerCoordinates): boolean => {
+	return (
+		point.clientX >= rect.left &&
+		point.clientX <= rect.right &&
+		point.clientY >= rect.top &&
+		point.clientY <= rect.bottom
+	)
+}
 
 /**
  * Проверяет, находится ли точка внутри DOM-элемента.
@@ -47,8 +52,9 @@ export const isPointInsideRect = (rect: DOMRect, point: PointerCoordinates): boo
  * @param point - Координаты точки.
  * @returns true, если точка внутри элемента.
  */
-export const isPointInsideElement = (element: HTMLElement, point: PointerCoordinates): boolean =>
-	isPointInsideRect(element.getBoundingClientRect(), point)
+export const isPointInsideElement = (element: HTMLElement, point: IPointerCoordinates): boolean => {
+	return isPointInsideRect(element.getBoundingClientRect(), point)
+}
 
 /**
  * Проверяет, находится ли точка внутри элемента с учётом отступа.
@@ -60,7 +66,7 @@ export const isPointInsideElement = (element: HTMLElement, point: PointerCoordin
  */
 export const isPointInsideExpandedElement = (
 	element: HTMLElement,
-	point: PointerCoordinates,
+	point: IPointerCoordinates,
 	padding: number,
 ): boolean => {
 	const rect = element.getBoundingClientRect()
@@ -80,7 +86,7 @@ export const isPointInsideExpandedElement = (
  * @param padding - Отступ.
  * @returns Расширенный прямоугольник.
  */
-export const expandRect = (rect: DOMRect, padding: number): RectLike => ({
+export const expandRect = (rect: DOMRect, padding: number): IRectLike => ({
 	top: rect.top - padding,
 	right: rect.right + padding,
 	bottom: rect.bottom + padding,
@@ -97,7 +103,7 @@ export const expandRect = (rect: DOMRect, padding: number): RectLike => ({
  * @param offsetTop - Смещение по вертикали.
  * @returns Углы прямоугольника.
  */
-export const getRelativeRectPoints = (rect: RectLike, offsetLeft: number, offsetTop: number): RectPoints => ({
+export const getRelativeRectPoints = (rect: IRectLike, offsetLeft: number, offsetTop: number): IRectPoints => ({
 	topLeft: [rect.left - offsetLeft, rect.top - offsetTop],
 	topRight: [rect.right - offsetLeft, rect.top - offsetTop],
 	bottomRight: [rect.right - offsetLeft, rect.bottom - offsetTop],
@@ -111,20 +117,11 @@ export const getRelativeRectPoints = (rect: RectLike, offsetLeft: number, offset
  * @param restPoints - Остальные точки.
  * @returns Строка SVG path.
  */
-export const createPolygonPath = (firstPoint: Point, ...restPoints: Point[]): string => {
+export const createPolygonPath = (firstPoint: TPoint, ...restPoints: TPoint[]): string => {
 	const restPath = restPoints.map((point) => `L ${point[0]} ${point[1]}`).join(" ")
 
 	return `M ${firstPoint[0]} ${firstPoint[1]} ${restPath} Z`
 }
-
-/**
- * Создаёт SVG path для прямоугольника.
- *
- * @param params - Параметры прямоугольника (x, y, width, height).
- * @returns Строка SVG path.
- */
-export const createRectPath = ({ x, y, width, height }: { height: number; width: number; x: number; y: number }) =>
-	`M ${x} ${y} H ${x + width} V ${y + height} H ${x} Z`
 
 /**
  * Возвращает центр прямоугольника.
@@ -144,7 +141,7 @@ const getRectCenter = (rect: DOMRect) => ({
  * @param containerRect - Прямоугольник container-элемента.
  * @returns Сторона расположения контейнера.
  */
-export const getFloatingPlacementSide = (targetRect: DOMRect, containerRect: DOMRect): HoverSafeZonePlacementSide => {
+export const getFloatingPlacementSide = (targetRect: DOMRect, containerRect: DOMRect): THoverSafeZonePlacementSide => {
 	if (containerRect.left >= targetRect.right) {
 		return "right"
 	}
@@ -167,10 +164,18 @@ export const getFloatingPlacementSide = (targetRect: DOMRect, containerRect: DOM
 	const deltaY = containerCenter.y - targetCenter.y
 
 	if (Math.abs(deltaX) >= Math.abs(deltaY)) {
-		return deltaX >= 0 ? "right" : "left"
+		if (deltaX >= 0) {
+			return "right"
+		}
+
+		return "left"
 	}
 
-	return deltaY >= 0 ? "bottom" : "top"
+	if (deltaY >= 0) {
+		return "bottom"
+	}
+
+	return "top"
 }
 
 /**
@@ -181,8 +186,9 @@ export const getFloatingPlacementSide = (targetRect: DOMRect, containerRect: DOM
  * @param padding - Отступ.
  * @returns true, если точка в вертикальном диапазоне.
  */
-const isPointInVerticalRange = (rect: DOMRect, point: PointerCoordinates, padding: number): boolean =>
-	point.clientY >= rect.top - padding && point.clientY <= rect.bottom + padding
+const isPointInVerticalRange = (rect: DOMRect, point: IPointerCoordinates, padding: number): boolean => {
+	return point.clientY >= rect.top - padding && point.clientY <= rect.bottom + padding
+}
 
 /**
  * Проверяет, находится ли точка в горизонтальном диапазоне прямоугольника с учётом отступа.
@@ -192,8 +198,9 @@ const isPointInVerticalRange = (rect: DOMRect, point: PointerCoordinates, paddin
  * @param padding - Отступ.
  * @returns true, если точка в горизонтальном диапазоне.
  */
-const isPointInHorizontalRange = (rect: DOMRect, point: PointerCoordinates, padding: number): boolean =>
-	point.clientX >= rect.left - padding && point.clientX <= rect.right + padding
+const isPointInHorizontalRange = (rect: DOMRect, point: IPointerCoordinates, padding: number): boolean => {
+	return point.clientX >= rect.left - padding && point.clientX <= rect.right + padding
+}
 
 /**
  * Проверяет, находится ли точка рядом со стороной target-элемента,
@@ -209,8 +216,8 @@ export const isPointNearTargetSideFacingContainer = ({
 	padding,
 }: {
 	padding: number
-	placementSide: HoverSafeZonePlacementSide
-	point: PointerCoordinates
+	placementSide: THoverSafeZonePlacementSide
+	point: IPointerCoordinates
 	targetRect: DOMRect
 }): boolean => {
 	if (placementSide === "right") {
@@ -243,8 +250,8 @@ export const isPointNearContainerSideFacingTarget = ({
 }: {
 	containerRect: DOMRect
 	padding: number
-	placementSide: HoverSafeZonePlacementSide
-	point: PointerCoordinates
+	placementSide: THoverSafeZonePlacementSide
+	point: IPointerCoordinates
 }): boolean => {
 	if (placementSide === "right") {
 		return point.clientX <= containerRect.left + padding && isPointInVerticalRange(containerRect, point, padding)
@@ -267,13 +274,14 @@ export const isPointNearContainerSideFacingTarget = ({
  * @param params - Параметры: позиция мыши и углы контейнера.
  * @returns Строка SVG path, состоящая из четырёх треугольников.
  */
-export const createSafeZonePath = ({ mouse, container }: { container: RectPoints; mouse: Point }) =>
-	[
+export const createSafeZonePath = ({ mouse, container }: { container: IRectPoints; mouse: TPoint }) => {
+	return [
 		createPolygonPath(mouse, container.topLeft, container.topRight),
 		createPolygonPath(mouse, container.topRight, container.bottomRight),
 		createPolygonPath(mouse, container.bottomRight, container.bottomLeft),
 		createPolygonPath(mouse, container.bottomLeft, container.topLeft),
 	].join(" ")
+}
 
 /**
  * Вычисляет общие границы оверлея, охватывающие target и container с отступом.
@@ -283,7 +291,7 @@ export const createSafeZonePath = ({ mouse, container }: { container: RectPoints
  * @param padding - Отступ от границ.
  * @returns Прямоугольник, объединяющий оба элемента с отступом.
  */
-const getOverlayBounds = (targetRect: DOMRect, containerRect: DOMRect, padding: number): RectLike => {
+const getOverlayBounds = (targetRect: DOMRect, containerRect: DOMRect, padding: number): IRectLike => {
 	const top = Math.min(targetRect.top, containerRect.top) - padding
 	const left = Math.min(targetRect.left, containerRect.left) - padding
 	const bottom = Math.max(targetRect.bottom, containerRect.bottom) + padding
@@ -300,55 +308,19 @@ const getOverlayBounds = (targetRect: DOMRect, containerRect: DOMRect, padding: 
 }
 
 /**
- * Создаёт SVG clip-path, который вырезает target и container из общего фона.
- * Используется для создания эффекта "дырки" вокруг элементов.
- *
- * @param params - Параметры: bounds, targetRect, containerRect.
- * @returns Строка SVG path для clipPath.
- */
-const createSafeZoneClipPath = ({
-	bounds,
-	targetRect,
-	containerRect,
-}: {
-	bounds: RectLike
-	containerRect: DOMRect
-	targetRect: DOMRect
-}): string => {
-	const targetClip = getRelativeRectPoints(targetRect, bounds.left, bounds.top)
-	const containerClip = getRelativeRectPoints(containerRect, bounds.left, bounds.top)
-
-	return [
-		`M 0 0 H ${bounds.width} V ${bounds.height} H 0 Z`,
-		createRectPath({
-			x: targetClip.topLeft[0],
-			y: targetClip.topLeft[1],
-			width: targetRect.width,
-			height: targetRect.height,
-		}),
-		createRectPath({
-			x: containerClip.topLeft[0],
-			y: containerClip.topLeft[1],
-			width: containerRect.width,
-			height: containerRect.height,
-		}),
-	].join(" ")
-}
-
-/**
  * Результат построения оверлея безопасной зоны.
  */
-export interface SafeZoneOverlayBuildResult {
+export interface ISafeZoneOverlayBuildResult {
 	/** Прямоугольник container-элемента. */
 	containerRect: DOMRect
 	/** Источник активации safe-zone. */
-	origin: HoverSafeZoneOrigin
+	origin: THoverSafeZoneOrigin
 	/** Состояние оверлея. */
-	overlayState: HoverSafeZoneOverlayState
+	overlayState: IHoverSafeZoneOverlayState
 	/** Сторона расположения контейнера относительно target. */
-	placementSide: HoverSafeZonePlacementSide
+	placementSide: THoverSafeZonePlacementSide
 	/** Позиция мыши относительно границ оверлея. */
-	relativeMouse: Point
+	relativeMouse: TPoint
 	/** Прямоугольник target-элемента. */
 	targetRect: DOMRect
 }
@@ -364,14 +336,14 @@ export const createSafeZoneOverlayState = ({
 	containerElement,
 	padding,
 	mouse,
-	origin: _origin,
+	origin,
 }: {
 	containerElement: HTMLElement
-	mouse: Point
-	origin: HoverSafeZoneOrigin
+	mouse: TPoint
+	origin: THoverSafeZoneOrigin
 	padding: number
 	targetElement: HTMLElement
-}): null | SafeZoneOverlayBuildResult => {
+}): ISafeZoneOverlayBuildResult | null => {
 	const targetRect = targetElement.getBoundingClientRect()
 	const containerRect = containerElement.getBoundingClientRect()
 	const bounds = getOverlayBounds(targetRect, containerRect, padding)
@@ -380,15 +352,16 @@ export const createSafeZoneOverlayState = ({
 		return null
 	}
 
-	const paddedContainerRect = expandRect(containerRect, padding)
-	const container = getRelativeRectPoints(paddedContainerRect, bounds.left, bounds.top)
+	const destinationRect = origin === "target" ? containerRect : targetRect
+	const paddedDestinationRect = expandRect(destinationRect, padding)
+	const destination = getRelativeRectPoints(paddedDestinationRect, bounds.left, bounds.top)
 	const placementSide = getFloatingPlacementSide(targetRect, containerRect)
-	const relativeMouse: Point = [mouse[0] - bounds.left, mouse[1] - bounds.top]
+	const relativeMouse: TPoint = [mouse[0] - bounds.left, mouse[1] - bounds.top]
 
 	return {
 		targetRect,
 		containerRect,
-		origin: _origin,
+		origin,
 		placementSide,
 		relativeMouse,
 		overlayState: {
@@ -400,12 +373,7 @@ export const createSafeZoneOverlayState = ({
 			},
 			safeZonePath: createSafeZonePath({
 				mouse: relativeMouse,
-				container,
-			}),
-			clipPath: createSafeZoneClipPath({
-				bounds,
-				targetRect,
-				containerRect,
+				container: destination,
 			}),
 		},
 	}
@@ -419,13 +387,16 @@ export const createSafeZoneOverlayState = ({
  * @returns true, если точка внутри границ.
  */
 export const isPointInsideOverlayBounds = (
-	overlayState: HoverSafeZoneOverlayState,
-	point: PointerCoordinates,
-): boolean =>
-	point.clientX >= overlayState.bounds.left &&
-	point.clientX <= overlayState.bounds.left + overlayState.bounds.width &&
-	point.clientY >= overlayState.bounds.top &&
-	point.clientY <= overlayState.bounds.top + overlayState.bounds.height
+	overlayState: IHoverSafeZoneOverlayState,
+	point: IPointerCoordinates,
+): boolean => {
+	return (
+		point.clientX >= overlayState.bounds.left &&
+		point.clientX <= overlayState.bounds.left + overlayState.bounds.width &&
+		point.clientY >= overlayState.bounds.top &&
+		point.clientY <= overlayState.bounds.top + overlayState.bounds.height
+	)
+}
 
 /**
  * Сравнивает два состояния оверлея на идентичность.
@@ -435,8 +406,8 @@ export const isPointInsideOverlayBounds = (
  * @returns true, если состояния идентичны.
  */
 export const isSameOverlayState = (
-	currentOverlayState: HoverSafeZoneOverlayState | null,
-	nextOverlayState: HoverSafeZoneOverlayState | null,
+	currentOverlayState: IHoverSafeZoneOverlayState | null,
+	nextOverlayState: IHoverSafeZoneOverlayState | null,
 ): boolean => {
 	if (currentOverlayState === nextOverlayState) {
 		return true
@@ -448,7 +419,6 @@ export const isSameOverlayState = (
 
 	return (
 		currentOverlayState.safeZonePath === nextOverlayState.safeZonePath &&
-		currentOverlayState.clipPath === nextOverlayState.clipPath &&
 		currentOverlayState.bounds.top === nextOverlayState.bounds.top &&
 		currentOverlayState.bounds.left === nextOverlayState.bounds.left &&
 		currentOverlayState.bounds.width === nextOverlayState.bounds.width &&
@@ -468,7 +438,7 @@ export const isPointInsideSvgPath = ({
 	point,
 }: {
 	pathElement: SVGPathElement
-	point: PointerCoordinates
+	point: IPointerCoordinates
 	svgElement: SVGSVGElement
 }): boolean => {
 	try {

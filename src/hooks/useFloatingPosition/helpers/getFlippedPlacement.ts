@@ -1,11 +1,14 @@
-import type { FloatingAvailableSpace, FloatingPlacement } from "../useFloatingPosition.types"
+import type { IFloatingAvailableSpace, TFloatingPlacement } from "../useFloatingPosition.types"
 
 import { getOppositeSide } from "./getOppositeSide"
 import { createFloatingPlacement, parseFloatingPlacement } from "./parseFloatingPlacement"
 
-interface GetFlippedPlacementParams {
+/**
+ * Параметры для расчёта flip-логики placement.
+ */
+interface IGetFlippedPlacementParams {
 	/** Доступное пространство вокруг reference-элемента. */
-	availableSpace: FloatingAvailableSpace
+	availableSpace: IFloatingAvailableSpace
 	/** Флаг переворота на противоположную сторону. */
 	flip: boolean
 	/** Прямоугольник floating-элемента. */
@@ -13,7 +16,7 @@ interface GetFlippedPlacementParams {
 	/** Отступ между reference и floating-элементом. */
 	offset: number
 	/** Предпочитаемое расположение floating-элемента. */
-	placement: FloatingPlacement
+	placement: TFloatingPlacement
 }
 
 /**
@@ -28,7 +31,7 @@ export const getFlippedPlacement = ({
 	floatingRect,
 	offset,
 	placement,
-}: GetFlippedPlacementParams): FloatingPlacement => {
+}: IGetFlippedPlacementParams): TFloatingPlacement => {
 	if (!flip) {
 		return placement
 	}

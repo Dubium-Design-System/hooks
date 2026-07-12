@@ -1,6 +1,6 @@
 import { useMemo } from "react"
 
-import type { HoverSafeZonePointerType, UseHoverSafeZoneAreaOptions } from "../useHoverSafeZoneArea.types"
+import type { IUseHoverSafeZoneAreaOptions, THoverSafeZonePointerType } from "../useHoverSafeZoneArea.types"
 
 import {
 	HOVER_SAFE_ZONE_DEFAULT_PADDING,
@@ -11,7 +11,7 @@ import {
 /**
  * Нормализованные опции для хука useHoverSafeZoneArea.
  */
-export interface ResolvedHoverSafeZoneAreaOptions {
+export interface IResolvedHoverSafeZoneAreaOptions {
 	/** Флаг активности логики безопасной зоны. */
 	isActive: boolean
 	/** Флаг отключения всех взаимодействий. */
@@ -27,7 +27,7 @@ export interface ResolvedHoverSafeZoneAreaOptions {
 	/** Отступ вокруг target/container. */
 	padding: number
 	/** Типы указателя, для которых работает safe-zone. */
-	pointerTypes: readonly HoverSafeZonePointerType[]
+	pointerTypes: readonly THoverSafeZonePointerType[]
 	/** Время до авто-закрытия safe-zone (мс). */
 	timeout: number
 }
@@ -54,8 +54,8 @@ const normalizePositiveNumber = (value: number, fallback: number): number => {
  * @returns Массив типов указателей.
  */
 const normalizePointerTypes = (
-	pointerTypes: UseHoverSafeZoneAreaOptions["pointerTypes"],
-): readonly HoverSafeZonePointerType[] => {
+	pointerTypes: IUseHoverSafeZoneAreaOptions["pointerTypes"],
+): readonly THoverSafeZonePointerType[] => {
 	if (!pointerTypes?.length) {
 		return HOVER_SAFE_ZONE_DEFAULT_POINTER_TYPES
 	}
@@ -82,7 +82,7 @@ export const useResolvedHoverSafeZoneAreaOptions = ({
 	onSafeZoneMove,
 	onRequestClose,
 	onTimeout,
-}: UseHoverSafeZoneAreaOptions): ResolvedHoverSafeZoneAreaOptions => {
+}: IUseHoverSafeZoneAreaOptions): IResolvedHoverSafeZoneAreaOptions => {
 	const safePadding = normalizePositiveNumber(padding, HOVER_SAFE_ZONE_DEFAULT_PADDING)
 	const safeTimeout = normalizePositiveNumber(timeout, HOVER_SAFE_ZONE_DEFAULT_TIMEOUT)
 	const safePointerTypes = normalizePointerTypes(pointerTypes)

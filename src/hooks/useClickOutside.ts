@@ -1,64 +1,139 @@
 import { type RefObject, useEffect, useRef } from "react"
 
 /**
- * Тип события, используемого в хуке useClickOutside.
+ * Событие клика вне целевого элемента.
  */
-export type ClickOutsideEvent = PointerEvent
+export type TClickOutsideEvent = MouseEvent | PointerEvent
 
 /**
- * Хук для отслеживания кликов вне заданного DOM-элемента.
- *
- * Позволяет вызывать callback при клике (pointerdown) за пределами элемента,
- * на который указывает `ref`. Полезно для закрытия выпадающих списков,
- * модальных окон и других всплывающих элементов.
- *
- * @param ref - Ref на DOM-элемент, клики вне которого нужно отслеживать.
- * @param callback - Функция, вызываемая при клике вне элемента.
- * @param enabled - Флаг активности хука. Если `false`, обработчик не навешивается.
- *
- * @example
- * ```tsx
- * const ref = useRef<HTMLDivElement>(null);
- * useClickOutside(ref, () => setIsOpen(false));
- *
- * return <div ref={ref}>...</div>;
- * ```
+ * Тип события для отслеживания клика вне элемента.
  */
-export const useClickOutside = (
-	ref: RefObject<HTMLElement | null>,
-	callback: (event: ClickOutsideEvent) => void,
+export type TClickOutsideEventType = "click" | "pointerdown" | "pointerup"
+
+/**
+ * Опции хука `useClickOutside`.
+ */
+export interface IUseClickOutsideOptions {
+	/** Флаг использования фазы capture (перехвата) при подписке на событие. */
+	capture?: boolean
+	/** Флаг активности отслеживания кликов. */
+	enabled?: boolean
+	/** Тип события для отслеживания. */
+	eventType?: TClickOutsideEventType
+	/** Список ref-ов, клики на которых следует игнорировать. */
+	ignoreRefs?: readonly RefObject<Node | null>[]
+	/** Колбэк, вызываемый при клике вне целевых элементов. */
+	onOutsideClick: (event: TClickOutsideEvent) => void
+	/** Флаг пассивного слушателя события. */
+	passive?: boolean
+	/** Корневой элемент для подписки на событие (document, ShadowRoot). */
+	root?: Document | null | ShadowRoot
+	/** Список ref-ов целевых элементов для отслеживания. */
+	targetRefs: readonly RefObject<Node | null>[]
+}
+
+/**
+ * Проверяет, находится ли событие внутри одного из указанных DOM-элементов.
+ *
+ * @param event - Событие.
+ * @param refs - Список ref-ов для проверки.
+ * @returns `true`, если событие произошло внутри хотя бы одного элемента.
+ */
+const isEventInside = (event: Event, refs: readonly RefObject<Node | null>[]): boolean => {
+	const path = event.composedPath()
+	const eventTarget = event.target
+
+	return refs.some(({ current }) => {
+		if (!current) {
+			return false
+		}
+
+		if (path.includes(current)) {
+			return true
+		}
+
+		return eventTarget instanceof Node && current.contains(eventTarget)
+	})
+}
+
+/**
+ * Отслеживает клики вне указанных DOM-элементов.
+ *
+ * Вызывает `onOutsideClick`, когда пользователь кликает за пределами
+ * всех элементов из `targetRefs`. Позволяет игнорировать клики
+ * на элементах из `ignoreRefs`.
+ *
+ * @param options - Опции отслеживания кликов вне элемента.
+ */
+export const useClickOutside = ({
+	capture = true,
 	enabled = true,
-): void => {
-	const callbackRef = useRef(callback)
+	eventType = "pointerdown",
+	ignoreRefs = [],
+	onOutsideClick,
+	passive = false,
+	root,
+	targetRefs,
+}: IUseClickOutsideOptions): void => {
+	/** Ref для хранения актуального колбэка onOutsideClick. */
+	const callbackRef = useRef(onOutsideClick)
+	/** Ref для хранения актуального списка целевых элементов. */
+	const targetRefsRef = useRef(targetRefs)
+	/** Ref для хранения актуального списка игнорируемых элементов. */
+	const ignoreRefsRef = useRef(ignoreRefs)
 
 	useEffect(() => {
-		callbackRef.current = callback
-	}, [callback])
+		callbackRef.current = onOutsideClick
+	}, [onOutsideClick])
 
 	useEffect(() => {
-		const handlePointerDown = (event: PointerEvent): void => {
-			const element = ref.current
-			const { target } = event
+		targetRefsRef.current = targetRefs
+		ignoreRefsRef.current = ignoreRefs
+	}, [ignoreRefs, targetRefs])
 
-			if (!element || !(target instanceof Node)) {
+	useEffect(() => {
+		if (!enabled) {
+			return undefined
+		}
+
+		let eventRoot = root
+
+		if (eventRoot === undefined) {
+			eventRoot = typeof document === "undefined" ? null : document
+		}
+
+		if (!eventRoot) {
+			return undefined
+		}
+
+		/** Обработчик события клика. */
+		const handleEvent = (event: Event): void => {
+			const currentTargets = targetRefsRef.current
+
+			if (currentTargets.every(({ current }) => current === null)) {
 				return
 			}
 
-			if (element.contains(target)) {
+			if (isEventInside(event, currentTargets)) {
 				return
 			}
 
-			callbackRef.current(event)
+			if (isEventInside(event, ignoreRefsRef.current)) {
+				return
+			}
+
+			callbackRef.current(event as TClickOutsideEvent)
 		}
 
-		if (enabled) {
-			document.addEventListener("pointerdown", handlePointerDown)
+		const options: AddEventListenerOptions = {
+			capture,
+			passive,
 		}
+
+		eventRoot.addEventListener(eventType, handleEvent, options)
 
 		return () => {
-			if (enabled) {
-				document.removeEventListener("pointerdown", handlePointerDown)
-			}
+			eventRoot.removeEventListener(eventType, handleEvent, capture)
 		}
-	}, [enabled, ref])
+	}, [capture, enabled, eventType, passive, root])
 }

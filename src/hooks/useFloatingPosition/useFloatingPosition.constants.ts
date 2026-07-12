@@ -1,16 +1,11 @@
 import type { CSSProperties } from "react"
 
-import type { FloatingPlacement, FloatingStrategy } from "./useFloatingPosition.types"
+import type { TFloatingPlacement } from "./useFloatingPosition.types"
 
 /**
  * Стандартное расположение floating-элемента относительно reference-элемента.
  */
-export const DEFAULT_FLOATING_PLACEMENT: FloatingPlacement = "bottom-start"
-
-/**
- * Стратегия позиционирования по умолчанию.
- */
-export const DEFAULT_FLOATING_STRATEGY: FloatingStrategy = "fixed"
+export const DEFAULT_FLOATING_PLACEMENT: TFloatingPlacement = "bottom-start"
 
 /**
  * Стандартный отступ между reference и floating-элементом.
@@ -57,7 +52,7 @@ export const DEFAULT_FLOATING_AUTO_UPDATE = true
  */
 export const DEFAULT_FLOATING_STYLE: CSSProperties = {
 	left: 0,
-	position: DEFAULT_FLOATING_STRATEGY,
+	position: "fixed",
 	top: 0,
 	visibility: "hidden",
 }

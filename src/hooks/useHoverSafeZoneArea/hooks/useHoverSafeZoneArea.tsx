@@ -1,23 +1,13 @@
-import {
-	type ReactNode,
-	type PointerEvent as ReactPointerEvent,
-	type RefCallback,
-	useCallback,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react"
+import { type RefCallback, useCallback, useEffect, useRef, useState } from "react"
 
 import type {
-	HoverSafeZoneOrigin,
-	HoverSafeZoneOverlayState,
-	Point,
-	UseHoverSafeZoneAreaOptions,
-	UseHoverSafeZoneAreaResult,
+	IHoverSafeZoneOverlayState,
+	IUseHoverSafeZoneAreaOptions,
+	IUseHoverSafeZoneAreaResult,
+	THoverSafeZoneOrigin,
+	TPoint,
 } from "../useHoverSafeZoneArea.types"
 
-import { HoverSafeZoneAreaOverlay } from "../components/HoverSafeZoneAreaOverlay"
 import {
 	createSafeZoneOverlayState,
 	getPoint,
@@ -28,113 +18,114 @@ import {
 	isPointInsideSvgPath,
 	isSameOverlayState,
 } from "../utils/geometry"
-import { getPointerLeaveAction, getReactPointerData, isSupportedPointerType } from "../utils/pointer"
+import { isSupportedPointerType } from "../utils/pointer"
+import { createHoverSafeZoneSvgHitTester } from "../utils/svgHitTester"
 import { useIsomorphicLayoutEffect } from "../utils/useIsomorphicLayoutEffect"
 import { useResolvedHoverSafeZoneAreaOptions } from "./useResolvedHoverSafeZoneAreaOptions"
 
-type WindowWithResizeObserver = {
+/** Window с возможным ResizeObserver. */
+type TWindowWithResizeObserver = {
 	ResizeObserver?: typeof ResizeObserver
 } & Window
 
-type LogEvent = (area: string, event: string, details?: unknown) => void
-
 /**
- * Возвращает document, которому принадлежит элемент,
- * или глобальный document.
+ * Возвращает ownerDocument для элемента или document, если элемент не задан.
  *
- * @param element DOM-элемент или null.
- * @returns Document или null при SSR.
+ * @param element - DOM-элемент.
+ * @returns Document или null.
  */
 const getOwnerDocument = (element: HTMLElement | null): Document | null => {
-	if (element) {
-		return element.ownerDocument
-	}
-
-	return typeof document === "undefined" ? null : document
+	return element?.ownerDocument ?? (typeof document === "undefined" ? null : document)
 }
 
 /**
- * Возвращает window, которому принадлежит элемент,
- * или глобальный window.
+ * Возвращает ownerWindow для элемента или window, если элемент не задан.
  *
- * @param element DOM-элемент или null.
- * @returns WindowWithResizeObserver или null при SSR.
+ * @param element - DOM-элемент.
+ * @returns Window или null.
  */
-const getOwnerWindow = (element: HTMLElement | null): null | WindowWithResizeObserver => {
-	const ownerDocument = getOwnerDocument(element)
-
-	return ownerDocument?.defaultView ?? (typeof window === "undefined" ? null : window)
+const getOwnerWindow = (element: HTMLElement | null): null | TWindowWithResizeObserver => {
+	return getOwnerDocument(element)?.defaultView ?? (typeof window === "undefined" ? null : window)
 }
 
-export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseHoverSafeZoneAreaResult => {
+/**
+ * Хук для создания безопасной зоны при наведении.
+ *
+ * Создаёт невидимую область между target- и container-элементами,
+ * предотвращающую ложное закрытие всплывающих элементов.
+ * SVG для hit-test создаётся и удаляется внутри хука автоматически.
+ *
+ * @param options - Опции безопасной зоны.
+ * @returns Ref callback-и для target и container элементов.
+ */
+export const useHoverSafeZoneArea = (options: IUseHoverSafeZoneAreaOptions): IUseHoverSafeZoneAreaResult => {
+	/** Нормализованные опции. */
 	const resolvedOptions = useResolvedHoverSafeZoneAreaOptions(options)
-
+	/** Ref для хранения актуальных опций. */
 	const optionsRef = useRef(resolvedOptions)
+	/** Ref для хранения target-элемента. */
 	const targetElementRef = useRef<HTMLElement | null>(null)
+	/** Ref для хранения container-элемента. */
 	const containerElementRef = useRef<HTMLElement | null>(null)
-	const svgRef = useRef<null | SVGSVGElement>(null)
-	const pathRef = useRef<null | SVGPathElement>(null)
-	const mouseRef = useRef<Point>([0, 0])
-	const originRef = useRef<HoverSafeZoneOrigin>("target")
-	const timeoutTimerRef = useRef<null | number>(null)
+	/** Ref для хранения SVG hit-tester. */
+	const svgHitTesterRef = useRef<null | ReturnType<typeof createHoverSafeZoneSvgHitTester>>(null)
+	/** Ref для хранения текущей позиции указателя. */
+	const mouseRef = useRef<TPoint>([0, 0])
+	/** Ref для хранения источника активации safe-zone. */
+	const originRef = useRef<THoverSafeZoneOrigin>("target")
+	/** Ref для хранения идентификатора таймера закрытия. */
+	const closeTimerRef = useRef<null | number>(null)
+	/** Ref для хранения идентификатора animation frame. */
 	const updateFrameRef = useRef<null | number>(null)
-	const overlayStateRef = useRef<HoverSafeZoneOverlayState | null>(null)
+	/** Ref для хранения последнего состояния оверлея. */
+	const overlayStateRef = useRef<IHoverSafeZoneOverlayState | null>(null)
+	/** Ref для отслеживания входа в safe-zone. */
 	const isSafeZoneEnteredRef = useRef(false)
-
-	const [targetElement, setTargetElementState] = useState<HTMLElement | null>(null)
-
-	const [containerElement, setContainerElementState] = useState<HTMLElement | null>(null)
-
-	const [overlayState, setOverlayState] = useState<HoverSafeZoneOverlayState | null>(null)
+	/** Состояние target-элемента. */
+	const [targetElement, setTargetElement] = useState<HTMLElement | null>(null)
+	/** Состояние container-элемента. */
+	const [containerElement, setContainerElement] = useState<HTMLElement | null>(null)
 
 	useIsomorphicLayoutEffect(() => {
 		optionsRef.current = resolvedOptions
 	}, [resolvedOptions])
 
-	const targetRef: RefCallback<HTMLElement> = useCallback((element) => {
-		if (targetElementRef.current === element) {
+	/** Ref callback для target-элемента. */
+	const targetRef = useCallback<RefCallback<HTMLElement>>((node) => {
+		targetElementRef.current = node
+		setTargetElement(node)
+	}, [])
+
+	/** Ref callback для container-элемента. */
+	const containerRef = useCallback<RefCallback<HTMLElement>>((node) => {
+		containerElementRef.current = node
+		setContainerElement(node)
+	}, [])
+
+	/** Обновляет состояние оверлея и SVG hit-tester. */
+	const updateOverlayState = useCallback((nextState: IHoverSafeZoneOverlayState | null): void => {
+		if (isSameOverlayState(overlayStateRef.current, nextState)) {
 			return
 		}
 
-		targetElementRef.current = element
-		setTargetElementState(element)
+		overlayStateRef.current = nextState
+		svgHitTesterRef.current?.update(nextState)
 	}, [])
 
-	const containerRef: RefCallback<HTMLElement> = useCallback((element) => {
-		if (containerElementRef.current === element) {
-			return
-		}
-
-		containerElementRef.current = element
-		setContainerElementState(element)
-	}, [])
-
-	const logEvent = useCallback<LogEvent>(() => undefined, [])
-
-	const updateOverlayState = useCallback((nextOverlayState: HoverSafeZoneOverlayState | null) => {
-		if (isSameOverlayState(overlayStateRef.current, nextOverlayState)) {
-			return
-		}
-
-		overlayStateRef.current = nextOverlayState
-
-		setOverlayState(nextOverlayState)
-	}, [])
-
-	const clearCloseTimeout = useCallback(() => {
+	/** Очищает таймер автоматического закрытия. */
+	const clearCloseTimer = useCallback((): void => {
 		const ownerWindow = getOwnerWindow(targetElementRef.current ?? containerElementRef.current)
 
-		if (!ownerWindow || timeoutTimerRef.current === null) {
+		if (!ownerWindow || closeTimerRef.current === null) {
 			return
 		}
 
-		ownerWindow.clearTimeout(timeoutTimerRef.current)
+		ownerWindow.clearTimeout(closeTimerRef.current)
+		closeTimerRef.current = null
+	}, [])
 
-		timeoutTimerRef.current = null
-		logEvent("timeout", "clear")
-	}, [logEvent])
-
-	const cancelOverlayUpdate = useCallback(() => {
+	/** Отменяет запланированное обновление через animation frame. */
+	const cancelScheduledUpdate = useCallback((): void => {
 		const ownerWindow = getOwnerWindow(targetElementRef.current ?? containerElementRef.current)
 
 		if (!ownerWindow || updateFrameRef.current === null) {
@@ -142,593 +133,307 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 		}
 
 		ownerWindow.cancelAnimationFrame(updateFrameRef.current)
-
 		updateFrameRef.current = null
-		logEvent("overlay", "cancel-update")
-	}, [logEvent])
+	}, [])
 
-	const stopSafeZoneTimers = useCallback(() => {
-		clearCloseTimeout()
-		cancelOverlayUpdate()
-	}, [cancelOverlayUpdate, clearCloseTimeout])
-
-	const hideSafeZone = useCallback(() => {
+	/** Скрывает safe-zone и очищает все таймеры. */
+	const hideSafeZone = useCallback((): void => {
 		isSafeZoneEnteredRef.current = false
-		stopSafeZoneTimers()
+		clearCloseTimer()
+		cancelScheduledUpdate()
 		updateOverlayState(null)
+	}, [cancelScheduledUpdate, clearCloseTimer, updateOverlayState])
 
-		logEvent("lifecycle", "hide", {
-			mouse: mouseRef.current,
-		})
-	}, [logEvent, stopSafeZoneTimers, updateOverlayState])
-
-	const isPointerEventAllowed = useCallback(
-		(event: Pick<PointerEvent, "pointerType"> | Pick<ReactPointerEvent<SVGPathElement>, "pointerType">): boolean =>
-			isSupportedPointerType(event, optionsRef.current.pointerTypes),
-		[],
-	)
-
-	const handleTimeoutClose = useCallback(() => {
-		timeoutTimerRef.current = null
+	/** Обработчик закрытия по таймауту. */
+	const handleTimeoutClose = useCallback((): void => {
+		closeTimerRef.current = null
 		isSafeZoneEnteredRef.current = false
-
+		cancelScheduledUpdate()
 		updateOverlayState(null)
-		cancelOverlayUpdate()
-
-		logEvent("timeout", "timeout-close", {
-			mouse: mouseRef.current,
-		})
-
 		optionsRef.current.onTimeout?.()
 		optionsRef.current.onRequestClose?.()
-	}, [cancelOverlayUpdate, logEvent, updateOverlayState])
+	}, [cancelScheduledUpdate, updateOverlayState])
 
-	const resetCloseTimeout = useCallback(() => {
-		clearCloseTimeout()
+	/** Сбрасывает таймер автоматического закрытия. */
+	const resetCloseTimer = useCallback((): void => {
+		clearCloseTimer()
 
 		const currentOptions = optionsRef.current
-
 		const ownerWindow = getOwnerWindow(targetElementRef.current ?? containerElementRef.current)
 
 		if (!ownerWindow || !currentOptions.isActive || currentOptions.isDisabled || currentOptions.timeout <= 0) {
-			logEvent("timeout", "skip", {
-				mouse: mouseRef.current,
-			})
-
 			return
 		}
 
-		logEvent("timeout", "set", {
-			mouse: mouseRef.current,
-		})
+		closeTimerRef.current = ownerWindow.setTimeout(handleTimeoutClose, currentOptions.timeout)
+	}, [clearCloseTimer, handleTimeoutClose])
 
-		timeoutTimerRef.current = ownerWindow.setTimeout(handleTimeoutClose, currentOptions.timeout)
-	}, [clearCloseTimeout, logEvent, handleTimeoutClose])
-
-	const updateSafeZone = useCallback(() => {
+	/** Обновляет safe-zone на основе текущих позиций target и container. */
+	const updateSafeZone = useCallback((): void => {
 		const target = targetElementRef.current
 		const container = containerElementRef.current
 		const currentOptions = optionsRef.current
 
-		if (!currentOptions.isActive || currentOptions.isDisabled || !target || !container) {
-			logEvent("overlay", "update-skip", {
-				mouse: mouseRef.current,
-				extra: {
-					hasTargetElement: Boolean(target),
-					hasContainerElement: Boolean(container),
-				},
-			})
-
+		if (!target || !container || !currentOptions.isActive || currentOptions.isDisabled) {
 			updateOverlayState(null)
 
 			return
 		}
 
 		const result = createSafeZoneOverlayState({
-			targetElement: target,
 			containerElement: container,
-			padding: currentOptions.padding,
 			mouse: mouseRef.current,
 			origin: originRef.current,
+			padding: currentOptions.padding,
+			targetElement: target,
 		})
 
-		if (!result) {
-			logEvent("overlay", "update-invalid", {
-				mouse: mouseRef.current,
-			})
+		updateOverlayState(result?.overlayState ?? null)
+	}, [updateOverlayState])
 
-			updateOverlayState(null)
-
-			return
-		}
-
-		updateOverlayState(result.overlayState)
-
-		logEvent("overlay", "update", {
-			mouse: mouseRef.current,
-			overlayState: result.overlayState,
-			extra: {
-				placementSide: result.placementSide,
-				relativeMouse: result.relativeMouse,
-			},
-		})
-	}, [logEvent, updateOverlayState])
-
-	const scheduleUpdateSafeZone = useCallback(() => {
-		cancelOverlayUpdate()
+	/** Планирует обновление safe-zone на следующий animation frame. */
+	const scheduleSafeZoneUpdate = useCallback((): void => {
+		cancelScheduledUpdate()
 
 		const currentOptions = optionsRef.current
-
 		const ownerWindow = getOwnerWindow(targetElementRef.current ?? containerElementRef.current)
 
 		if (!ownerWindow || !currentOptions.isActive || currentOptions.isDisabled) {
-			logEvent("overlay", "schedule-skip", {
-				mouse: mouseRef.current,
-			})
-
 			return
 		}
 
-		logEvent("overlay", "schedule", {
-			mouse: mouseRef.current,
-		})
-
 		updateFrameRef.current = ownerWindow.requestAnimationFrame(() => {
 			updateFrameRef.current = null
-
 			updateSafeZone()
 		})
-	}, [cancelOverlayUpdate, logEvent, updateSafeZone])
+	}, [cancelScheduledUpdate, updateSafeZone])
 
-	const requestClose = useCallback(() => {
-		logEvent("close", "request-close", {
-			mouse: mouseRef.current,
-		})
-
+	/** Запрашивает закрытие safe-zone. */
+	const requestClose = useCallback((): void => {
 		hideSafeZone()
 		optionsRef.current.onRequestClose?.()
-	}, [logEvent, hideSafeZone])
+	}, [hideSafeZone])
 
+	/** Проверяет, разрешён ли тип указателя. */
+	const isPointerAllowed = useCallback((event: Pick<PointerEvent, "pointerType">): boolean => {
+		return isSupportedPointerType(event, optionsRef.current.pointerTypes)
+	}, [])
+
+	/** Активирует safe-zone при выходе указателя из элемента. */
 	const activateSafeZone = useCallback(
-		(event: PointerEvent, origin: HoverSafeZoneOrigin) => {
+		(event: PointerEvent, origin: THoverSafeZoneOrigin): void => {
 			const currentOptions = optionsRef.current
 
-			if (!isPointerEventAllowed(event) || !currentOptions.isActive || currentOptions.isDisabled) {
-				logEvent(origin, "activate-skip", {
-					mouse: getPoint(event),
-					point: getPointerCoordinates(event),
-					extra: {
-						pointerType: event.pointerType,
-					},
-				})
-
+			if (!isPointerAllowed(event) || !currentOptions.isActive || currentOptions.isDisabled) {
 				return
 			}
-
-			const mouse = getPoint(event)
 
 			originRef.current = origin
-			mouseRef.current = mouse
-
-			logEvent(origin, "activate", {
-				mouse,
-				point: getPointerCoordinates(event),
-				extra: { origin },
-			})
-
-			resetCloseTimeout()
-			scheduleUpdateSafeZone()
+			mouseRef.current = getPoint(event)
+			resetCloseTimer()
+			scheduleSafeZoneUpdate()
 		},
-		[logEvent, isPointerEventAllowed, resetCloseTimeout, scheduleUpdateSafeZone],
+		[isPointerAllowed, resetCloseTimer, scheduleSafeZoneUpdate],
 	)
 
+	/** Обработчик pointerenter на target. */
 	const handleTargetPointerEnter = useCallback(
-		(event: PointerEvent) => {
-			if (!isPointerEventAllowed(event)) {
+		(event: PointerEvent): void => {
+			if (!isPointerAllowed(event)) {
 				return
 			}
 
 			mouseRef.current = getPoint(event)
 			originRef.current = "target"
-
 			hideSafeZone()
-
-			logEvent("target", "pointer-enter", {
-				mouse: mouseRef.current,
-				point: getPointerCoordinates(event),
-			})
 		},
-		[logEvent, hideSafeZone, isPointerEventAllowed],
+		[hideSafeZone, isPointerAllowed],
 	)
 
+	/** Обработчик pointermove на target. */
 	const handleTargetPointerMove = useCallback(
-		(event: PointerEvent) => {
-			if (!isPointerEventAllowed(event)) {
+		(event: PointerEvent): void => {
+			if (!isPointerAllowed(event)) {
 				return
 			}
 
 			mouseRef.current = getPoint(event)
 			originRef.current = "target"
-
-			clearCloseTimeout()
-			scheduleUpdateSafeZone()
-
-			logEvent("target", "pointer-move", {
-				mouse: mouseRef.current,
-				point: getPointerCoordinates(event),
-			})
+			clearCloseTimer()
 		},
-		[clearCloseTimeout, logEvent, isPointerEventAllowed, scheduleUpdateSafeZone],
+		[clearCloseTimer, isPointerAllowed],
 	)
 
+	/** Обработчик pointerleave на target. */
 	const handleTargetPointerLeave = useCallback(
-		(event: PointerEvent) => {
-			if (!isPointerEventAllowed(event)) {
+		(event: PointerEvent): void => {
+			if (!isPointerAllowed(event)) {
 				return
 			}
 
-			const target = targetElementRef.current
-
-			const container = containerElementRef.current
-
-			const point = getPointerCoordinates(event)
-
-			const mouse = getPoint(event)
-
-			mouseRef.current = mouse
-			originRef.current = "target"
-
-			if (!target || !container) {
-				logEvent("target", "pointer-leave-no-elements", {
-					mouse,
-					point,
-				})
-
+			if (!targetElementRef.current || !containerElementRef.current) {
 				requestClose()
 
 				return
 			}
-
-			logEvent("target", "pointer-leave", {
-				mouse,
-				point,
-				extra: {
-					hasTarget: Boolean(target),
-					hasContainer: Boolean(container),
-				},
-			})
 
 			activateSafeZone(event, "target")
 		},
-		[activateSafeZone, logEvent, isPointerEventAllowed, requestClose],
+		[activateSafeZone, isPointerAllowed, requestClose],
 	)
 
+	/** Обработчик pointerenter на container. */
 	const handleContainerPointerEnter = useCallback(
-		(event: PointerEvent) => {
-			if (!isPointerEventAllowed(event)) {
+		(event: PointerEvent): void => {
+			if (!isPointerAllowed(event)) {
 				return
 			}
 
 			mouseRef.current = getPoint(event)
-
 			hideSafeZone()
-
-			logEvent("container", "pointer-enter", {
-				mouse: mouseRef.current,
-				point: getPointerCoordinates(event),
-			})
 		},
-		[logEvent, hideSafeZone, isPointerEventAllowed],
+		[hideSafeZone, isPointerAllowed],
 	)
 
+	/** Обработчик pointermove на container. */
 	const handleContainerPointerMove = useCallback(
-		(event: PointerEvent) => {
-			if (!isPointerEventAllowed(event)) {
+		(event: PointerEvent): void => {
+			if (!isPointerAllowed(event)) {
 				return
 			}
 
 			mouseRef.current = getPoint(event)
-
-			clearCloseTimeout()
-
-			logEvent("container", "pointer-move", {
-				mouse: mouseRef.current,
-				point: getPointerCoordinates(event),
-			})
+			clearCloseTimer()
 		},
-		[clearCloseTimeout, logEvent, isPointerEventAllowed],
+		[clearCloseTimer, isPointerAllowed],
 	)
 
+	/** Обработчик pointerleave на container. */
 	const handleContainerPointerLeave = useCallback(
-		(event: PointerEvent) => {
-			if (!isPointerEventAllowed(event)) {
+		(event: PointerEvent): void => {
+			if (!isPointerAllowed(event)) {
 				return
 			}
 
-			const target = targetElementRef.current
-
-			const container = containerElementRef.current
-
-			const point = getPointerCoordinates(event)
-
-			const mouse = getPoint(event)
-
-			mouseRef.current = mouse
-			originRef.current = "container"
-
-			if (!target || !container) {
-				logEvent("container", "pointer-leave-no-elements", {
-					mouse,
-					point,
-				})
-
+			if (!targetElementRef.current || !containerElementRef.current) {
 				requestClose()
 
 				return
 			}
-
-			logEvent("container", "pointer-leave", {
-				mouse,
-				point,
-				extra: {
-					hasTarget: Boolean(target),
-					hasContainer: Boolean(container),
-				},
-			})
 
 			activateSafeZone(event, "container")
 		},
-		[activateSafeZone, logEvent, isPointerEventAllowed, requestClose],
+		[activateSafeZone, isPointerAllowed, requestClose],
 	)
 
+	/** Обработчик pointermove на document для отслеживания safe-zone. */
 	const handleDocumentPointerMove = useCallback(
-		(event: PointerEvent) => {
-			if (!isPointerEventAllowed(event)) {
+		(event: PointerEvent): void => {
+			if (!isPointerAllowed(event)) {
 				return
 			}
 
-			const currentOverlayState = overlayStateRef.current
-
+			const overlayState = overlayStateRef.current
+			const target = targetElementRef.current
+			const container = containerElementRef.current
 			const currentOptions = optionsRef.current
 
-			const target = targetElementRef.current
-
-			const container = containerElementRef.current
-
-			if (
-				!currentOverlayState ||
-				!currentOptions.isActive ||
-				currentOptions.isDisabled ||
-				!target ||
-				!container
-			) {
+			if (!overlayState || !target || !container || !currentOptions.isActive || currentOptions.isDisabled) {
 				return
 			}
 
 			const point = getPointerCoordinates(event)
 
-			const mouse = getPoint(event)
-
-			if (isPointInsideElement(target, point)) {
-				mouseRef.current = mouse
-				originRef.current = "target"
-
-				clearCloseTimeout()
-				scheduleUpdateSafeZone()
-
-				logEvent("document", "pointer-move-target", { mouse, point })
-
-				return
-			}
-
-			if (isPointInsideElement(container, point)) {
-				mouseRef.current = mouse
-
+			if (isPointInsideElement(target, point) || isPointInsideElement(container, point)) {
+				mouseRef.current = getPoint(event)
 				hideSafeZone()
 
-				logEvent("document", "pointer-move-container", {
-					mouse,
-					point,
-				})
+				return
+			}
+
+			const destinationElement = originRef.current === "target" ? container : target
+
+			if (isPointInsideExpandedElement(destinationElement, point, currentOptions.padding)) {
+				mouseRef.current = getPoint(event)
+				resetCloseTimer()
+				scheduleSafeZoneUpdate()
 
 				return
 			}
 
-			if (isPointInsideExpandedElement(container, point, currentOptions.padding)) {
-				mouseRef.current = mouse
-
-				resetCloseTimeout()
-				scheduleUpdateSafeZone()
-
-				logEvent("document", "pointer-move-expanded-container", {
-					mouse,
-					point,
-				})
-
-				return
-			}
-
-			if (!isPointInsideOverlayBounds(currentOverlayState, point)) {
-				logEvent("document", "pointer-move-outside-bounds", {
-					mouse,
-					point,
-				})
-
+			if (!isPointInsideOverlayBounds(overlayState, point)) {
 				requestClose()
 
 				return
 			}
 
-			const svgElement = svgRef.current
-			const pathElement = pathRef.current
+			const svgHitTester = svgHitTesterRef.current
 
-			const isInsideSafeZone =
-				svgElement && pathElement
-					? isPointInsideSvgPath({
-							svgElement,
-							pathElement,
-							point,
-						})
-					: null
-
-			logEvent("document", "pointer-move", {
-				mouse,
-				point,
-				extra: {
-					isInsideSafeZone,
-				},
-			})
-
-			if (isInsideSafeZone === null) {
-				return
-			}
-
-			if (!isInsideSafeZone) {
-				isSafeZoneEnteredRef.current = false
-
+			if (
+				!svgHitTester ||
+				!isPointInsideSvgPath({
+					pathElement: svgHitTester.pathElement,
+					point,
+					svgElement: svgHitTester.svgElement,
+				})
+			) {
 				requestClose()
 
 				return
 			}
 
-			mouseRef.current = mouse
-			resetCloseTimeout()
+			mouseRef.current = getPoint(event)
+			resetCloseTimer()
 
 			if (!isSafeZoneEnteredRef.current) {
 				isSafeZoneEnteredRef.current = true
-
 				currentOptions.onSafeZoneEnter?.()
 			}
 
 			currentOptions.onSafeZoneMove?.()
-			scheduleUpdateSafeZone()
+			scheduleSafeZoneUpdate()
 		},
-		[
-			clearCloseTimeout,
-			logEvent,
-			hideSafeZone,
-			isPointerEventAllowed,
-			requestClose,
-			resetCloseTimeout,
-			scheduleUpdateSafeZone,
-		],
+		[hideSafeZone, isPointerAllowed, requestClose, resetCloseTimer, scheduleSafeZoneUpdate],
 	)
 
-	const handleSafeZonePointerEnter = useCallback(
-		(event: ReactPointerEvent<SVGPathElement>) => {
-			event.stopPropagation()
+	/** Эффект для создания SVG hit-tester. */
+	useEffect(() => {
+		if (!resolvedOptions.isActive || resolvedOptions.isDisabled || !targetElement || !containerElement) {
+			return undefined
+		}
 
-			if (!isPointerEventAllowed(event)) {
-				return
+		const ownerDocument = getOwnerDocument(targetElement)
+
+		if (!ownerDocument?.body) {
+			return undefined
+		}
+
+		const hitTester = createHoverSafeZoneSvgHitTester(ownerDocument)
+		svgHitTesterRef.current = hitTester
+		hitTester.update(overlayStateRef.current)
+
+		return () => {
+			if (svgHitTesterRef.current === hitTester) {
+				svgHitTesterRef.current = null
 			}
 
-			const { mouse, point } = getReactPointerData(event)
+			hitTester.destroy()
+		}
+	}, [containerElement, resolvedOptions.isActive, resolvedOptions.isDisabled, targetElement])
 
-			mouseRef.current = mouse
-			resetCloseTimeout()
-
-			logEvent("safe-zone", "pointer-enter", { mouse, point })
-
-			optionsRef.current.onSafeZoneEnter?.()
-		},
-		[logEvent, isPointerEventAllowed, resetCloseTimeout],
-	)
-
-	const handleSafeZonePointerMove = useCallback(
-		(event: ReactPointerEvent<SVGPathElement>) => {
-			event.stopPropagation()
-
-			if (!isPointerEventAllowed(event)) {
-				return
-			}
-
-			const { mouse, point } = getReactPointerData(event)
-
-			mouseRef.current = mouse
-			resetCloseTimeout()
-
-			logEvent("safe-zone", "pointer-move", { mouse, point })
-
-			optionsRef.current.onSafeZoneMove?.()
-			scheduleUpdateSafeZone()
-		},
-		[logEvent, isPointerEventAllowed, resetCloseTimeout, scheduleUpdateSafeZone],
-	)
-
-	const handleSafeZonePointerLeave = useCallback(
-		(event: ReactPointerEvent<SVGPathElement>) => {
-			event.stopPropagation()
-
-			if (!isPointerEventAllowed(event)) {
-				return
-			}
-
-			const { point, mouse } = getReactPointerData(event)
-
-			const action = getPointerLeaveAction({
-				targetElement: targetElementRef.current,
-				containerElement: containerElementRef.current,
-				padding: optionsRef.current.padding,
-				point,
-			})
-
-			mouseRef.current = mouse
-
-			logEvent("safe-zone", "pointer-leave", {
-				mouse,
-				point,
-				extra: { action },
-			})
-
-			if (action === "target") {
-				originRef.current = "target"
-				hideSafeZone()
-
-				return
-			}
-
-			if (action === "container") {
-				hideSafeZone()
-
-				return
-			}
-
-			if (action === "expanded-container") {
-				resetCloseTimeout()
-				scheduleUpdateSafeZone()
-
-				return
-			}
-
-			requestClose()
-		},
-		[
-			clearCloseTimeout,
-			logEvent,
-			hideSafeZone,
-			isPointerEventAllowed,
-			requestClose,
-			resetCloseTimeout,
-			scheduleUpdateSafeZone,
-		],
-	)
-
+	/** Эффект для подписки на события target. */
 	useEffect(() => {
 		if (!resolvedOptions.isActive || resolvedOptions.isDisabled || !targetElement) {
 			return undefined
 		}
 
 		targetElement.addEventListener("pointerenter", handleTargetPointerEnter)
-
 		targetElement.addEventListener("pointermove", handleTargetPointerMove)
-
 		targetElement.addEventListener("pointerleave", handleTargetPointerLeave)
 
 		return () => {
 			targetElement.removeEventListener("pointerenter", handleTargetPointerEnter)
-
 			targetElement.removeEventListener("pointermove", handleTargetPointerMove)
-
 			targetElement.removeEventListener("pointerleave", handleTargetPointerLeave)
 		}
 	}, [
@@ -740,22 +445,19 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 		targetElement,
 	])
 
+	/** Эффект для подписки на события container. */
 	useEffect(() => {
-		if (!resolvedOptions.isActive || resolvedOptions.isDisabled || !targetElement || !containerElement) {
+		if (!resolvedOptions.isActive || resolvedOptions.isDisabled || !containerElement) {
 			return undefined
 		}
 
 		containerElement.addEventListener("pointerenter", handleContainerPointerEnter)
-
 		containerElement.addEventListener("pointermove", handleContainerPointerMove)
-
 		containerElement.addEventListener("pointerleave", handleContainerPointerLeave)
 
 		return () => {
 			containerElement.removeEventListener("pointerenter", handleContainerPointerEnter)
-
 			containerElement.removeEventListener("pointermove", handleContainerPointerMove)
-
 			containerElement.removeEventListener("pointerleave", handleContainerPointerLeave)
 		}
 	}, [
@@ -765,11 +467,11 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 		handleContainerPointerMove,
 		resolvedOptions.isActive,
 		resolvedOptions.isDisabled,
-		targetElement,
 	])
 
+	/** Эффект для подписки на pointermove на document. */
 	useEffect(() => {
-		if (!resolvedOptions.isActive || resolvedOptions.isDisabled || !overlayState) {
+		if (!resolvedOptions.isActive || resolvedOptions.isDisabled || !targetElement || !containerElement) {
 			return undefined
 		}
 
@@ -784,10 +486,17 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 		return () => {
 			ownerDocument.removeEventListener("pointermove", handleDocumentPointerMove)
 		}
-	}, [handleDocumentPointerMove, overlayState, resolvedOptions.isActive, resolvedOptions.isDisabled, targetElement])
+	}, [
+		containerElement,
+		handleDocumentPointerMove,
+		resolvedOptions.isActive,
+		resolvedOptions.isDisabled,
+		targetElement,
+	])
 
+	/** Эффект для отслеживания изменений геометрии (resize, scroll). */
 	useEffect(() => {
-		if (!resolvedOptions.isActive || resolvedOptions.isDisabled || !overlayState) {
+		if (!resolvedOptions.isActive || resolvedOptions.isDisabled || !targetElement || !containerElement) {
 			return undefined
 		}
 
@@ -797,150 +506,52 @@ export const useHoverSafeZoneArea = (options: UseHoverSafeZoneAreaOptions): UseH
 			return undefined
 		}
 
-		const handleWindowUpdate = () => {
-			if (!overlayStateRef.current || !optionsRef.current.isActive || optionsRef.current.isDisabled) {
-				return
+		/** Обработчик изменения геометрии. */
+		const handleGeometryChange = (): void => {
+			if (overlayStateRef.current) {
+				scheduleSafeZoneUpdate()
 			}
-
-			logEvent("lifecycle", "window-update", {
-				mouse: mouseRef.current,
-			})
-
-			scheduleUpdateSafeZone()
 		}
 
-		ownerWindow.addEventListener("resize", handleWindowUpdate)
+		ownerWindow.addEventListener("resize", handleGeometryChange)
+		ownerWindow.addEventListener("scroll", handleGeometryChange, true)
+		ownerWindow.visualViewport?.addEventListener("resize", handleGeometryChange)
+		ownerWindow.visualViewport?.addEventListener("scroll", handleGeometryChange)
 
-		ownerWindow.addEventListener("scroll", handleWindowUpdate, true)
+		const ResizeObserverConstructor =
+			ownerWindow.ResizeObserver ?? (typeof ResizeObserver === "undefined" ? undefined : ResizeObserver)
+		const resizeObserver = ResizeObserverConstructor ? new ResizeObserverConstructor(handleGeometryChange) : null
 
-		ownerWindow.visualViewport?.addEventListener("resize", handleWindowUpdate)
-
-		ownerWindow.visualViewport?.addEventListener("scroll", handleWindowUpdate)
+		resizeObserver?.observe(targetElement)
+		resizeObserver?.observe(containerElement)
 
 		return () => {
-			ownerWindow.removeEventListener("resize", handleWindowUpdate)
-
-			ownerWindow.removeEventListener("scroll", handleWindowUpdate, true)
-
-			ownerWindow.visualViewport?.removeEventListener("resize", handleWindowUpdate)
-
-			ownerWindow.visualViewport?.removeEventListener("scroll", handleWindowUpdate)
+			ownerWindow.removeEventListener("resize", handleGeometryChange)
+			ownerWindow.removeEventListener("scroll", handleGeometryChange, true)
+			ownerWindow.visualViewport?.removeEventListener("resize", handleGeometryChange)
+			ownerWindow.visualViewport?.removeEventListener("scroll", handleGeometryChange)
+			resizeObserver?.disconnect()
 		}
-	}, [
-		logEvent,
-		overlayState,
-		resolvedOptions.isActive,
-		resolvedOptions.isDisabled,
-		scheduleUpdateSafeZone,
-		targetElement,
-	])
+	}, [containerElement, resolvedOptions.isActive, resolvedOptions.isDisabled, scheduleSafeZoneUpdate, targetElement])
 
+	/** Эффект для скрытия safe-zone при деактивации. */
 	useEffect(() => {
-		if (
-			!resolvedOptions.isActive ||
-			resolvedOptions.isDisabled ||
-			!overlayState ||
-			!targetElement ||
-			!containerElement
-		) {
-			return undefined
-		}
-
-		const ownerWindow = getOwnerWindow(targetElement)
-
-		const ResizeObserverConstructor: typeof ResizeObserver | undefined =
-			ownerWindow?.ResizeObserver ?? (typeof ResizeObserver === "undefined" ? undefined : ResizeObserver)
-
-		if (!ResizeObserverConstructor) {
-			return undefined
-		}
-
-		const handleElementResize = () => {
-			if (!overlayStateRef.current || !optionsRef.current.isActive || optionsRef.current.isDisabled) {
-				return
-			}
-
-			logEvent("lifecycle", "element-resize", {
-				mouse: mouseRef.current,
-			})
-
-			scheduleUpdateSafeZone()
-		}
-
-		const resizeObserver = new ResizeObserverConstructor(handleElementResize)
-
-		resizeObserver.observe(targetElement)
-		resizeObserver.observe(containerElement)
-
-		return () => {
-			resizeObserver.disconnect()
-		}
-	}, [
-		containerElement,
-		logEvent,
-		overlayState,
-		resolvedOptions.isActive,
-		resolvedOptions.isDisabled,
-		scheduleUpdateSafeZone,
-		targetElement,
-	])
-
-	useEffect(() => {
-		if (targetElement && containerElement) {
+		if (targetElement && containerElement && resolvedOptions.isActive && !resolvedOptions.isDisabled) {
 			return undefined
 		}
 
 		hideSafeZone()
 
 		return undefined
-	}, [containerElement, hideSafeZone, targetElement])
+	}, [containerElement, hideSafeZone, resolvedOptions.isActive, resolvedOptions.isDisabled, targetElement])
 
-	useEffect(() => {
-		if (resolvedOptions.isActive && !resolvedOptions.isDisabled) {
-			return undefined
-		}
-
-		isSafeZoneEnteredRef.current = false
-		stopSafeZoneTimers()
-		updateOverlayState(null)
-
-		return undefined
-	}, [resolvedOptions.isActive, resolvedOptions.isDisabled, stopSafeZoneTimers, updateOverlayState])
-
+	/** Эффект очистки при размонтировании. */
 	useEffect(
 		() => () => {
-			stopSafeZoneTimers()
+			hideSafeZone()
 		},
-		[stopSafeZoneTimers],
+		[hideSafeZone],
 	)
 
-	const elementToRender = useMemo<ReactNode>(() => {
-		if (resolvedOptions.isDisabled) {
-			return null
-		}
-
-		return (
-			<HoverSafeZoneAreaOverlay
-				onSafeZonePointerEnter={handleSafeZonePointerEnter}
-				onSafeZonePointerLeave={handleSafeZonePointerLeave}
-				onSafeZonePointerMove={handleSafeZonePointerMove}
-				overlayState={resolvedOptions.isActive ? overlayState : null}
-				pathRef={pathRef}
-				svgRef={svgRef}
-			/>
-		)
-	}, [
-		handleSafeZonePointerEnter,
-		handleSafeZonePointerLeave,
-		handleSafeZonePointerMove,
-		overlayState,
-		resolvedOptions.isActive,
-		resolvedOptions.isDisabled,
-	])
-
-	return {
-		targetRef,
-		containerRef,
-		elementToRender,
-	}
+	return { containerRef, targetRef }
 }

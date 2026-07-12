@@ -1,29 +1,25 @@
 import { useEffect, useRef } from "react"
 
 /**
- * Хук для выполнения функции при размонтировании компонента.
+ * Выполняет эффект только при размонтировании компонента.
  *
- * Используется для очистки ресурсов или выполнения побочных эффектов,
- * которые должны произойти только при размонтировании.
+ * Аналог `useEffect(() => fn, [])`, но с использованием ref для хранения
+ * колбэка, что гарантирует выполнение самой последней версии callback.
  *
- * @param fn - Функция, которая будет вызвана при размонтировании компонента.
- *
- * @example
- * useUnmountEffect(() => {
- *   console.log('Компонент размонтирован')
- *   clearInterval(timerId)
- * })
+ * @param callback - Функция, которую нужно выполнить при размонтировании.
  */
-export const useUnmountEffect = (fn: () => void): void => {
-	const fnRef = useRef(fn)
+export const useUnmountEffect = (callback: VoidFunction): void => {
+	/** Ref для хранения актуального колбэка. */
+	const callbackRef = useRef(callback)
 
 	useEffect(() => {
-		fnRef.current = fn
-	}, [fn])
+		callbackRef.current = callback
+	}, [callback])
 
-	useEffect(() => {
-		return () => {
-			fnRef.current()
-		}
-	}, [])
+	useEffect(
+		() => () => {
+			callbackRef.current()
+		},
+		[],
+	)
 }

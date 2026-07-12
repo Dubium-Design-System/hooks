@@ -1,8 +1,11 @@
-import type { FloatingPlacement, FloatingViewportRect } from "../useFloatingPosition.types"
+import type { IFloatingViewportRect, TFloatingPlacement } from "../useFloatingPosition.types"
 
 import { parseFloatingPlacement } from "./parseFloatingPlacement"
 
-interface GetAvailableHeightParams {
+/**
+ * Параметры для расчёта доступной высоты floating-элемента.
+ */
+interface IGetAvailableHeightParams {
 	/** Флаг или числовой лимит максимальной высоты. */
 	maxHeight: boolean | number
 	/** Отступ между reference и floating-элементом. */
@@ -10,11 +13,11 @@ interface GetAvailableHeightParams {
 	/** Минимальный отступ от границ viewport. */
 	padding: number
 	/** Итоговое расположение floating-элемента. */
-	placement: FloatingPlacement
+	placement: TFloatingPlacement
 	/** Прямоугольник reference-элемента. */
 	referenceRect: DOMRect
 	/** Прямоугольник viewport. */
-	viewportRect: FloatingViewportRect
+	viewportRect: IFloatingViewportRect
 }
 
 /**
@@ -30,7 +33,7 @@ export const getAvailableHeight = ({
 	placement,
 	referenceRect,
 	viewportRect,
-}: GetAvailableHeightParams): null | number => {
+}: IGetAvailableHeightParams): null | number => {
 	if (!maxHeight) {
 		return null
 	}

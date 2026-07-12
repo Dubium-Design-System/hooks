@@ -1,143 +1,143 @@
-import { useEffect, useState } from "react"
+import { useMemo, useSyncExternalStore } from "react"
 
-type NetworkEffectiveType = "2g" | "3g" | "4g" | "slow-2g"
+/**
+ * Тип эффективности сетевого соединения.
+ */
+export type TNetworkEffectiveType = "2g" | "3g" | "4g" | "slow-2g"
 
-type NetworkConnectionType = "bluetooth" | "cellular" | "ethernet" | "none" | "other" | "unknown" | "wifi" | "wimax"
+/**
+ * Тип сетевого соединения.
+ */
+export type TNetworkConnectionType =
+	"bluetooth" | "cellular" | "ethernet" | "mixed" | "none" | "other" | "unknown" | "wifi" | "wimax"
 
-type NetworkInformationLite = {
-	readonly downlink?: number
-	readonly downlinkMax?: number
-	readonly effectiveType?: NetworkEffectiveType
-	readonly rtt?: number
-	readonly saveData?: boolean
-	readonly type?: NetworkConnectionType
-} & EventTarget
+/** Интерфейс, описывающий NetworkInformation API. */
+interface INetworkInformationLike extends EventTarget {
+	downlink?: number
+	effectiveType?: TNetworkEffectiveType
+	rtt?: number
+	saveData?: boolean
+	type?: TNetworkConnectionType
+}
 
-type BrowserNavigatorLite = {
-	readonly connection?: NetworkInformationLite
-	readonly mozConnection?: NetworkInformationLite
-	readonly onLine: boolean
-	readonly webkitConnection?: NetworkInformationLite
+/** Navigator с возможным connection API. */
+type TNavigatorWithConnection = {
+	connection?: INetworkInformationLike
+	mozConnection?: INetworkInformationLike
+	webkitConnection?: INetworkInformationLike
 }
 
 /**
- * Состояние сетевого подключения.
+ * Состояние сети.
  */
-export interface NetworkState {
+export interface INetworkState {
 	/** Скорость загрузки в Мбит/с. */
-	downlink: null | number
-
-	/** Максимальная скорость загрузки в Мбит/с. */
-	downlinkMax: null | number
-
-	/** Тип эффективного соединения. */
-	effectiveType: NetworkEffectiveType | null
-
+	downlink?: number
+	/** Эффективный тип соединения. */
+	effectiveType?: TNetworkEffectiveType
 	/** Флаг наличия интернет-соединения. */
 	online: boolean
-
 	/** Round-trip time в миллисекундах. */
-	rtt: null | number
-
+	rtt?: number
 	/** Флаг режима экономии данных. */
-	saveData: boolean | null
-
-	/** Тип сетевого подключения. */
-	type: NetworkConnectionType | null
+	saveData?: boolean
+	/** Тип сетевого соединения. */
+	type?: TNetworkConnectionType
 }
 
+/** Состояние сети по умолчанию для SSR. */
+const SERVER_STATE: INetworkState = Object.freeze({ online: true })
+/** Сериализованное состояние для SSR. */
+const SERVER_SNAPSHOT = JSON.stringify(SERVER_STATE)
+
 /**
- * Возвращает браузерный объект navigator.
+ * Возвращает объект NetworkInformation из navigator, если доступен.
  *
- * @returns Объект navigator или null при SSR.
+ * @returns NetworkInformation или null.
  */
-const getBrowserNavigator = (): BrowserNavigatorLite | null => {
+const getConnection = (): INetworkInformationLike | null => {
 	if (typeof window === "undefined") {
 		return null
 	}
 
-	return Reflect.get(window, "navigator")
+	const currentNavigator = window as unknown as TNavigatorWithConnection
+
+	return currentNavigator.connection ?? currentNavigator.mozConnection ?? currentNavigator.webkitConnection ?? null
 }
 
 /**
- * Возвращает информацию о сетевом соединении.
+ * Читает текущее состояние сети.
  *
- * @returns Информация о соединении или null, если API недоступен.
+ * @returns Текущее состояние сети.
  */
-const getConnection = (): NetworkInformationLite | null => {
-	const browserNavigator = getBrowserNavigator()
-
-	if (!browserNavigator) {
-		return null
+const readNetworkState = (): INetworkState => {
+	if (typeof window === "undefined") {
+		return SERVER_STATE
 	}
 
-	return browserNavigator.connection ?? browserNavigator.mozConnection ?? browserNavigator.webkitConnection ?? null
-}
-
-/**
- * Собирает текущее состояние сети.
- *
- * @returns Текущее состояние сетевого подключения.
- */
-const getNetworkState = (): NetworkState => {
-	const browserNavigator = getBrowserNavigator()
 	const connection = getConnection()
+	const currentNavigator = window as unknown as { onLine: boolean }
 
 	return {
-		online: browserNavigator?.onLine ?? false,
-		downlink: connection?.downlink ?? null,
-		downlinkMax: connection?.downlinkMax ?? null,
-		effectiveType: connection?.effectiveType ?? null,
-		rtt: connection?.rtt ?? null,
-		saveData: connection?.saveData ?? null,
-		type: connection?.type ?? null,
+		downlink: connection?.downlink,
+		effectiveType: connection?.effectiveType,
+		online: currentNavigator.onLine,
+		rtt: connection?.rtt,
+		saveData: connection?.saveData,
+		type: connection?.type,
 	}
 }
 
 /**
- * Хук для отслеживания состояния сетевого подключения.
+ * Возвращает сериализованный снимок состояния сети.
  *
- * Предоставляет информацию о статусе соединения, типе сети,
- * скорости загрузки, задержке и режиме экономии данных.
- *
- * @returns Текущее состояние сетевого подключения.
- *
- * @example
- * ```tsx
- * const { online, effectiveType, downlink } =
- *   useNetworkState()
- *
- * return (
- *   <div>
- *     {online ? "Online" : "Offline"} ({effectiveType})
- *   </div>
- * )
- * ```
+ * @returns JSON-строка состояния сети.
  */
-export const useNetworkState = (): NetworkState => {
-	const [networkState, setNetworkState] = useState<NetworkState>(getNetworkState)
+const getSnapshot = (): string => {
+	return JSON.stringify(readNetworkState())
+}
 
-	useEffect(() => {
-		const connection = getConnection()
+/**
+ * Подписывается на изменения состояния сети.
+ *
+ * @param onStoreChange - Колбэк при изменении состояния.
+ * @returns Функция отписки.
+ */
+const subscribe = (onStoreChange: VoidFunction): VoidFunction => {
+	if (typeof window === "undefined") {
+		return () => undefined
+	}
 
-		const updateNetworkState = (): void => {
-			setNetworkState(getNetworkState())
+	const connection = getConnection()
+
+	window.addEventListener("online", onStoreChange)
+	window.addEventListener("offline", onStoreChange)
+
+	if (connection) {
+		connection.addEventListener("change", onStoreChange)
+	}
+
+	return () => {
+		window.removeEventListener("online", onStoreChange)
+		window.removeEventListener("offline", onStoreChange)
+
+		if (connection) {
+			connection.removeEventListener("change", onStoreChange)
 		}
+	}
+}
 
-		window.addEventListener("online", updateNetworkState)
+/**
+ * Отслеживает состояние сети браузера.
+ *
+ * Использует `useSyncExternalStore` для реактивного отслеживания
+ * online/offline статуса, типа соединения, эффективного типа,
+ * скорости загрузки и других параметров NetworkInformation API.
+ *
+ * @returns Текущее состояние сети.
+ */
+export const useNetworkState = (): INetworkState => {
+	const serializedState = useSyncExternalStore(subscribe, getSnapshot, () => SERVER_SNAPSHOT)
 
-		window.addEventListener("offline", updateNetworkState)
-
-		connection?.addEventListener("change", updateNetworkState)
-
-		return () => {
-			window.removeEventListener("online", updateNetworkState)
-
-			window.removeEventListener("offline", updateNetworkState)
-
-			connection?.removeEventListener("change", updateNetworkState)
-		}
-	}, [])
-
-	return networkState
+	return useMemo(() => JSON.parse(serializedState) as INetworkState, [serializedState])
 }

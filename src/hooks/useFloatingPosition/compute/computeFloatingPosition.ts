@@ -1,4 +1,4 @@
-import type { FloatingPositionResult, FloatingResolvedOptions } from "../useFloatingPosition.types"
+import type { IFloatingPositionResult, IFloatingResolvedOptions } from "../useFloatingPosition.types"
 
 import { getAvailableHeight } from "../helpers/getAvailableHeight"
 import { getAvailableSpace } from "../helpers/getAvailableSpace"
@@ -8,11 +8,14 @@ import { getShiftedFloatingCoords } from "../helpers/getShiftedFloatingCoords"
 import { getViewportRect } from "../helpers/getViewportRect"
 import { isRectVisible } from "../helpers/isRectVisible"
 
-interface ComputeFloatingPositionParams {
+/**
+ * Параметры для вычисления позиции floating-элемента.
+ */
+interface IComputeFloatingPositionParams {
 	/** Floating-элемент, позицию которого нужно рассчитать. */
 	floatingElement: HTMLElement
 	/** Нормализованные опции позиционирования. */
-	options: FloatingResolvedOptions
+	options: IFloatingResolvedOptions
 	/** Reference-элемент, относительно которого позиционируется floating. */
 	referenceElement: HTMLElement
 }
@@ -49,7 +52,7 @@ export const computeFloatingPosition = ({
 	floatingElement,
 	options,
 	referenceElement,
-}: ComputeFloatingPositionParams): FloatingPositionResult => {
+}: IComputeFloatingPositionParams): IFloatingPositionResult => {
 	const referenceRect = referenceElement.getBoundingClientRect()
 	const measuredFloatingRect = floatingElement.getBoundingClientRect()
 	const floatingRect = getFloatingRectForCompute(measuredFloatingRect, referenceRect, options.sameWidth)
@@ -86,11 +89,8 @@ export const computeFloatingPosition = ({
 		viewportRect,
 	})
 
-	const scrollX = options.strategy === "absolute" ? window.scrollX : 0
-	const scrollY = options.strategy === "absolute" ? window.scrollY : 0
-
-	const x = Math.round(shiftedCoords.x + scrollX)
-	const y = Math.round(shiftedCoords.y + scrollY)
+	const x = Math.round(shiftedCoords.x)
+	const y = Math.round(shiftedCoords.y)
 
 	const availableHeight = getAvailableHeight({
 		maxHeight: options.maxHeight,
@@ -103,9 +103,9 @@ export const computeFloatingPosition = ({
 
 	const shouldHide = options.hideWhenReferenceHidden && isReferenceHidden
 
-	const style: FloatingPositionResult["style"] = {
+	const style: IFloatingPositionResult["style"] = {
 		left: x,
-		position: options.strategy,
+		position: "fixed",
 		top: y,
 		visibility: shouldHide ? "hidden" : "visible",
 	}

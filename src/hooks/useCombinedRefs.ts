@@ -1,54 +1,83 @@
-import { type Ref, type RefCallback, useCallback } from "react"
+import { type Ref, type RefCallback, useCallback, useEffect, useLayoutEffect, useRef } from "react"
 
 /**
- * Вспомогательная функция для установки значения переданного ref.
- *
- * @typeParam T - Тип элемента, на который ссылается ref.
- * @param ref - Ref-объект или callback, который необходимо обновить.
- * @param node - Новое значение узла (элемент DOM или `null`).
+ * Возможное значение ref: callback, объект, null или undefined.
  */
-const setRef = <T>(ref: null | Ref<T> | undefined, node: null | T): void => {
+export type TPossibleRef<T> = null | Ref<T> | undefined
+
+const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect
+
+/**
+ * Устанавливает значение callback-ref или object-ref.
+ *
+ * @param ref - Обновляемый ref.
+ * @param value - Новое значение ref.
+ */
+const setRef = <T>(ref: TPossibleRef<T>, value: null | T): void => {
 	if (typeof ref === "function") {
-		ref(node)
-	} else if (ref) {
+		ref(value)
+
+		return
+	}
+
+	if (ref) {
 		Object.assign(ref, {
-			current: node,
+			current: value,
 		})
 	}
 }
 
 /**
- * Хук, объединяющий два ref в один callback-ref.
+ * Проверяет наличие ref в массиве по ссылочному равенству.
  *
- * @remarks
- * Позволяет передавать один callback-ref вместо двух отдельных ref-объектов.
- * Полезен, когда необходимо одновременно прикрепить ссылку на DOM-элемент
- * к нескольким потребителям (например, forwarded ref и внутренний ref).
- *
- * @typeParam T - Тип элемента, на который ссылаются ref.
- * @param firstRef - Первый ref-объект или callback.
- * @param secondRef - Второй ref-объект или callback.
- * @returns Callback-ref, который при вызове обновляет оба переданных ref.
- *
- * @example
- * ```tsx
- * const Component = React.forwardRef<HTMLDivElement>((props, forwardedRef) => {
- *   const internalRef = useRef<HTMLDivElement>(null)
- *   const combinedRef = useCombinedRefs(forwardedRef, internalRef)
- *
- *   return <div ref={combinedRef} {...props} />
- * })
- * ```
+ * @param refs - Массив ref-ов для поиска.
+ * @param targetRef - Искомый ref.
+ * @returns `true`, если ref найден в массиве.
  */
-export const useCombinedRefs = <T>(
-	firstRef: null | Ref<T> | undefined,
-	secondRef: null | Ref<T> | undefined,
-): RefCallback<T> => {
-	return useCallback(
-		(node: null | T) => {
-			setRef(firstRef, node)
-			setRef(secondRef, node)
-		},
-		[firstRef, secondRef],
-	)
+const includesRef = <T>(refs: readonly TPossibleRef<T>[], targetRef: TPossibleRef<T>): boolean => {
+	return refs.some((ref) => Object.is(ref, targetRef))
+}
+
+/**
+ * Объединяет несколько refs в один стабильный callback ref.
+ *
+ * При изменении списка refs:
+ * - удалённые refs получают null;
+ * - добавленные refs получают текущий DOM-элемент.
+ *
+ * @param refs - Список объединяемых refs.
+ * @returns Стабильный callback ref.
+ */
+export const useCombinedRefs = <T>(...refs: TPossibleRef<T>[]): RefCallback<T> => {
+	const refsRef = useRef<readonly TPossibleRef<T>[]>(refs)
+	const nodeRef = useRef<null | T>(null)
+
+	const combinedRef = useCallback<RefCallback<T>>((node) => {
+		nodeRef.current = node
+
+		refsRef.current.forEach((ref) => {
+			setRef(ref, node)
+		})
+	}, [])
+
+	useIsomorphicLayoutEffect(() => {
+		const previousRefs = refsRef.current
+		const currentNode = nodeRef.current
+
+		previousRefs.forEach((previousRef) => {
+			if (!includesRef(refs, previousRef)) {
+				setRef(previousRef, null)
+			}
+		})
+
+		refs.forEach((currentRef) => {
+			if (!includesRef(previousRefs, currentRef)) {
+				setRef(currentRef, currentNode)
+			}
+		})
+
+		refsRef.current = refs
+	})
+
+	return combinedRef
 }

@@ -1,27 +1,72 @@
-export { useClickOutside } from "./hooks/useClickOutside"
-export { useCombinedRefs } from "./hooks/useCombinedRefs"
-export { useCounter } from "./hooks/useCounter"
+/**
+ * @packageDocumentation
+ * Dubium Design System — хуки React
+ *
+ * Коллекция переиспользуемых React-хуков для построения UI-компонентов
+ * Dubium Design System. Включает хуки для позиционирования floating-элементов,
+ * безопасной зоны при наведении, отслеживания событий, управления состоянием
+ * и других распространённых задач.
+ */
+
+export {
+	type IUseClickOutsideOptions,
+	type TClickOutsideEvent,
+	type TClickOutsideEventType,
+	useClickOutside,
+} from "./hooks/useClickOutside"
+export { type TPossibleRef, useCombinedRefs } from "./hooks/useCombinedRefs"
+export { type IUseCounterOptions, type IUseCounterReturn, useCounter } from "./hooks/useCounter"
 export { useDebounce } from "./hooks/useDebounce"
 export { type IDebouncedFunction, useDebounceFn } from "./hooks/useDebounceFn"
-export { useEventListener } from "./hooks/useEventListener"
-export { type FloatingPlacement, useFloatingPosition } from "./hooks/useFloatingPosition"
-export { useHover } from "./hooks/useHover"
+export { type IUseEventListenerOptions, type TEventListenerTarget, useEventListener } from "./hooks/useEventListener"
+export {
+	type IFloatingPositionResult,
+	type IUseFloatingPositionOptions,
+	type IUseFloatingPositionReturn,
+	type TFloatingPlacement,
+	useFloatingPosition,
+} from "./hooks/useFloatingPosition"
+export { type IUseHoverOptions, type IUseHoverReturn, type THoverPointerType, useHover } from "./hooks/useHover"
 export {
 	HoverSafeZoneArea,
-	type HoverSafeZoneAreaChildrenProps,
-	type HoverSafeZoneAreaProps,
+	type IHoverSafeZoneAreaChildrenProps,
+	type IHoverSafeZoneAreaProps,
+	type IUseHoverSafeZoneAreaOptions,
+	type IUseHoverSafeZoneAreaResult,
+	type THoverSafeZonePointerType,
 	useHoverSafeZoneArea,
-	type UseHoverSafeZoneAreaOptions,
-	type UseHoverSafeZoneAreaResult,
 } from "./hooks/useHoverSafeZoneArea"
-export { useIntersectionObserver } from "./hooks/useIntersectionObserver"
+export {
+	type IUseIntersectionObserverOptions,
+	type IUseIntersectionObserverReturn,
+	useIntersectionObserver,
+} from "./hooks/useIntersectionObserver"
 export { useMountEffect } from "./hooks/useMountEffect"
-export { useMove } from "./hooks/useMove"
-export { useNetworkState } from "./hooks/useNetworkState"
-export { usePinInput } from "./hooks/usePinInput"
-export { usePrevious } from "./hooks/usePrevious"
-export { useThrottle } from "./hooks/useThrottle"
+export { type IPosition, type IUseMoveOptions, type IUseMoveReturn, type TMoveMode, useMove } from "./hooks/useMove"
+export {
+	type INetworkState,
+	type TNetworkConnectionType,
+	type TNetworkEffectiveType,
+	useNetworkState,
+} from "./hooks/useNetworkState"
+export {
+	type IPinInputClearOptions,
+	type IPinInputFieldProps,
+	type IUsePinInputOptions,
+	type IUsePinInputReturn,
+	type TPinInputType,
+	type TPinInputValues,
+	usePinInput,
+} from "./hooks/usePinInput"
+export { type IUseThrottleOptions, useThrottle } from "./hooks/useThrottle"
 export { useUnmountEffect } from "./hooks/useUnmountEffect"
 export { useUpdateEffect } from "./hooks/useUpdateEffect"
-export { useVirtualList } from "./hooks/useVirtualList"
-export { useWindowSize } from "./hooks/useWindowSize"
+export {
+	type IScrollToIndexOptions,
+	type IUseVirtualListOptions,
+	type IUseVirtualListReturn,
+	type IVirtualListItem,
+	type TVirtualListAlign,
+	useVirtualList,
+} from "./hooks/useVirtualList"
+export { type IWindowSize, useWindowSize } from "./hooks/useWindowSize"
